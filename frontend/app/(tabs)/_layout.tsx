@@ -1,32 +1,41 @@
 import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function TabLayout() {
+export default function GlobalTabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTitleStyle: { fontWeight: 'bold' },
+        headerShown: false,
+        tabBarActiveTintColor: '#FF7675',
+        tabBarInactiveTintColor: '#A0A0A0',
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Buddies',
-          // ... tab icon settings
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="goals"
         options={{
           title: 'All Goals',
-          // ... tab icon settings
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="checkbox-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="camera"
         options={{
           title: 'Global Camera',
-          headerShown: false, // optional: hide tab header if camera goes full screen
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="camera-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
