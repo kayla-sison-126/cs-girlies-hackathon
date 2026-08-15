@@ -1,27 +1,23 @@
 import { supabase } from './supabase';
 
-export async function createPairing() {
+export async function getCurrentUser() {
   const {
     data: { user },
-    error: userError,
+    error,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    throw new Error('You must be logged in to create a pairing.');
+  if (error || !user) {
+    throw new Error('You must be logged in.');
   }
 
-  const pairingCode = Math.random()
-    .toString(36)
-    .substring(2, 8)
-    .toUpperCase();
+  return user;
+}
 
+export async function getFriendship(friendshipId: string) {
   const { data, error } = await supabase
     .from('friendships')
-    .insert({
-      user_a_id: user.id,
-      pairing_code: pairingCode,
-    })
-    .select()
+    .select('*')
+    .eq('id', friendshipId)
     .single();
 
   if (error) {
@@ -31,42 +27,30 @@ export async function createPairing() {
   return data;
 }
 
-export async function joinPairing(pairingCode: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+export async function getFriendId(
+  friendshipId: string,
+  currentUserId: string
+) {
+  const friendship = await getFriendship(friendshipId);
 
-  if (userError || !user) {
-    throw new Error('You must be logged in to join a pairing.');
+  const friendId =
+    friendship.user_a_id === currentUserId
+      ? friendship.user_b_id
+      : friendship.user_a_id;
+
+  if (!friendId) {
+    throw new Error('Could not find your friend.');
   }
 
-  const code = pairingCode.trim().toUpperCase();
+  return friendId;
+}
 
-  const { data: friendship, error: findError } = await supabase
-    .from('friendships')
-    .select('*')
-    .eq('pairing_code', code)
-    .is('user_b_id', null)
-    .single();
-
-  if (findError) {
-    throw new Error('Pairing code not found or already used.');
-  }
-
-  if (friendship.user_a_id === user.id) {
-    throw new Error('You cannot join your own pairing.');
-  }
-
+export async function getFriendProfile(friendId: string) {
   const { data, error } = await supabase
-    .from('friendships')
-    .update({
-      user_b_id: user.id,
-    })
-    .eq('id', friendship.id)
-    .is('user_b_id', null)
-    .select()
-    .single();
+    .from('profiles')
+    .select('username')
+    .eq('id', friendId)
+    .maybeSingle();
 
   if (error) {
     throw error;
@@ -75,21 +59,28 @@ export async function joinPairing(pairingCode: string) {
   return data;
 }
 
-export async function getMyFriendships() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+export async function getFriendshipPet(
+  friendshipId: string
+) {
+  const { data, error } = await supabase
+    .from('pets')
+    .select('*')
+    .eq('friendship_id', friendshipId)
+    .maybeSingle();
 
-  if (userError || !user) {
-    throw new Error('You must be logged in to view your friendships.');
+  if (error) {
+    throw error;
   }
 
+  return data;
+}
+
+export async function getUserStats(userId: string) {
   const { data, error } = await supabase
-    .from('friendships')
+    .from('user_stats')
     .select('*')
-    .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-    .order('created_at', { ascending: false });
+    .eq('user_id', userId)
+    .maybeSingle();
 
   if (error) {
     throw error;

@@ -9,43 +9,67 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import {
+  CameraView,
+  CameraType,
+  useCameraPermissions,
+} from 'expo-camera';
+import {
+  useLocalSearchParams,
+  useRouter,
+  Stack,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../../lib/supabase';
+import { submitGoalProof } from '../../../lib/proofs';
 
 export default function FriendCameraScreen() {
-  const { id, goalId, goalTitle } = useLocalSearchParams<{
-    id: string;
-    goalId?: string;
-    goalTitle?: string;
-  }>();
+  const { id, goalId, goalTitle } =
+    useLocalSearchParams<{
+      id: string;
+      goalId?: string;
+      goalTitle?: string;
+    }>();
 
   const router = useRouter();
 
-  const [facing, setFacing] = useState<CameraType>('back');
-  const [permission, requestPermission] = useCameraPermissions();
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [facing, setFacing] =
+    useState<CameraType>('back');
 
-  const cameraRef = useRef<CameraView>(null);
+  const [permission, requestPermission] =
+    useCameraPermissions();
+
+  const [photoUri, setPhotoUri] =
+    useState<string | null>(null);
+
+  const [uploading, setUploading] =
+    useState(false);
+
+  const cameraRef =
+    useRef<CameraView>(null);
 
   if (!permission) {
-    return <View style={styles.container} />;
+    return (
+      <View style={styles.container} />
+    );
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
+      <View
+        style={styles.permissionContainer}
+      >
         <Text style={styles.permissionText}>
-          We need your permission to show the camera
+          We need your permission to show
+          the camera
         </Text>
 
         <TouchableOpacity
           style={styles.permissionBtn}
           onPress={requestPermission}
         >
-          <Text style={styles.permissionBtnText}>
+          <Text
+            style={styles.permissionBtnText}
+          >
             Grant Permission
           </Text>
         </TouchableOpacity>
@@ -55,23 +79,31 @@ export default function FriendCameraScreen() {
 
   const toggleCameraFacing = () => {
     setFacing((current) =>
-      current === 'back' ? 'front' : 'back'
+      current === 'back'
+        ? 'front'
+        : 'back'
     );
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current) {
+      return;
+    }
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
-      });
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          quality: 0.7,
+        });
 
       if (photo?.uri) {
         setPhotoUri(photo.uri);
       }
     } catch (error) {
-      console.error('Failed to take picture:', error);
+      console.error(
+        'Failed to take picture:',
+        error
+      );
 
       Alert.alert(
         'Camera Error',
@@ -97,92 +129,36 @@ export default function FriendCameraScreen() {
       return;
     }
 
-    if (uploading) return;
+    if (uploading) {
+      return;
+    }
 
     setUploading(true);
 
     try {
-      // Get the currently logged-in user
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        throw new Error(
-          'You must be logged in to submit proof.'
-        );
-      }
-
       /*
-       * Convert the camera's local URI into an ArrayBuffer.
-       * Supabase Storage can upload this directly.
+       * The Supabase upload and database logic
+       * lives in lib/proofs.ts.
        */
-      const response = await fetch(photoUri);
-      const arrayBuffer = await response.arrayBuffer();
-
-      /*
-       * Give every uploaded photo its own unique path.
-       *
-       * Example:
-       * user-id/goal-id/1723456789012.jpg
-       */
-      const filePath = `${user.id}/${goalId}/${Date.now()}.jpg`;
-
-      // Upload the photo to the existing goal-proofs bucket
-      const { error: uploadError } = await supabase.storage
-        .from('goal-proofs')
-        .upload(filePath, arrayBuffer, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      /*
-       * The goal-proofs bucket is public,
-       * so we can create a public URL for the image.
-       */
-      const {
-        data: { publicUrl },
-      } = supabase.storage
-        .from('goal-proofs')
-        .getPublicUrl(filePath);
-
-      /*
-       * Save the proof in the goal_proofs database table.
-       *
-       * It starts as "pending" because the friend
-       * still needs to review it.
-       */
-      const { error: proofError } = await supabase
-        .from('goal_proofs')
-        .insert({
-          goal_id: goalId,
-          submitted_by: user.id,
-          image_url: publicUrl,
-          status: 'pending',
-        });
-
-      if (proofError) {
-        throw proofError;
-      }
+      await submitGoalProof(
+        goalId,
+        photoUri
+      );
 
       Alert.alert(
         'Proof Submitted! 🎉',
         'Your friend can now review your proof.'
       );
 
-      // Return to the friendship page
+      /*
+       * Return to the friendship page.
+       */
       router.back();
     } catch (error: any) {
-      console.error('Proof submission error:', error);
+      console.error(
+        'Proof submission error:',
+        error
+      );
 
       Alert.alert(
         'Submission Failed',
@@ -203,27 +179,39 @@ export default function FriendCameraScreen() {
       />
 
       {photoUri ? (
-        // =========================
-        // PHOTO PREVIEW MODE
-        // =========================
+        /*
+         * =========================
+         * PHOTO PREVIEW MODE
+         * =========================
+         */
         <View style={styles.fullScreen}>
           <Image
             source={{ uri: photoUri }}
             style={styles.previewImage}
           />
 
-          <SafeAreaView style={styles.previewOverlay}>
+          <SafeAreaView
+            style={styles.previewOverlay}
+          >
             <Text style={styles.goalBanner}>
-              Proof for: {goalTitle || 'Accountability Goal'}
+              Proof for:{' '}
+              {goalTitle ||
+                'Accountability Goal'}
             </Text>
 
-            <View style={styles.previewActionRow}>
+            <View
+              style={
+                styles.previewActionRow
+              }
+            >
               <TouchableOpacity
                 style={[
                   styles.actionBtn,
                   styles.retakeBtn,
                 ]}
-                onPress={() => setPhotoUri(null)}
+                onPress={() =>
+                  setPhotoUri(null)
+                }
                 disabled={uploading}
               >
                 <Ionicons
@@ -232,7 +220,9 @@ export default function FriendCameraScreen() {
                   color="#2D3436"
                 />
 
-                <Text style={styles.retakeBtnText}>
+                <Text
+                  style={styles.retakeBtnText}
+                >
                   Retake
                 </Text>
               </TouchableOpacity>
@@ -241,13 +231,16 @@ export default function FriendCameraScreen() {
                 style={[
                   styles.actionBtn,
                   styles.submitBtn,
-                  uploading && styles.disabledBtn,
+                  uploading &&
+                    styles.disabledBtn,
                 ]}
                 onPress={submitProof}
                 disabled={uploading}
               >
                 {uploading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator
+                    color="#FFFFFF"
+                  />
                 ) : (
                   <>
                     <Ionicons
@@ -256,7 +249,11 @@ export default function FriendCameraScreen() {
                       color="#FFFFFF"
                     />
 
-                    <Text style={styles.submitBtnText}>
+                    <Text
+                      style={
+                        styles.submitBtnText
+                      }
+                    >
                       Send Proof
                     </Text>
                   </>
@@ -266,22 +263,31 @@ export default function FriendCameraScreen() {
           </SafeAreaView>
         </View>
       ) : (
-        // =========================
-        // CAMERA MODE
-        // =========================
+        /*
+         * =========================
+         * CAMERA MODE
+         * =========================
+         */
         <View style={styles.fullScreen}>
           <CameraView
             ref={cameraRef}
-            style={StyleSheet.absoluteFillObject}
+            style={
+              StyleSheet.absoluteFillObject
+            }
             facing={facing}
           />
 
-          <SafeAreaView style={styles.cameraOverlay}>
+          <SafeAreaView
+            style={styles.cameraOverlay}
+          >
             {/* Top Bar */}
+
             <View style={styles.topBar}>
               <TouchableOpacity
                 style={styles.backBtn}
-                onPress={() => router.back()}
+                onPress={() =>
+                  router.back()
+                }
                 activeOpacity={0.7}
               >
                 <Ionicons
@@ -292,9 +298,13 @@ export default function FriendCameraScreen() {
               </TouchableOpacity>
 
               {goalTitle && (
-                <View style={styles.goalTag}>
+                <View
+                  style={styles.goalTag}
+                >
                   <Text
-                    style={styles.goalTagText}
+                    style={
+                      styles.goalTagText
+                    }
                     numberOfLines={1}
                   >
                     Target: {goalTitle}
@@ -304,7 +314,9 @@ export default function FriendCameraScreen() {
 
               <TouchableOpacity
                 style={styles.flipBtn}
-                onPress={toggleCameraFacing}
+                onPress={
+                  toggleCameraFacing
+                }
               >
                 <Ionicons
                   name="camera-reverse"
@@ -315,13 +327,20 @@ export default function FriendCameraScreen() {
             </View>
 
             {/* Shutter */}
-            <View style={styles.bottomControls}>
+
+            <View
+              style={styles.bottomControls}
+            >
               <TouchableOpacity
                 style={styles.shutterOuter}
                 onPress={takePicture}
                 activeOpacity={0.8}
               >
-                <View style={styles.shutterInner} />
+                <View
+                  style={
+                    styles.shutterInner
+                  }
+                />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -386,7 +405,8 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor:
+      'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -395,13 +415,15 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor:
+      'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   goalTag: {
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor:
+      'rgba(0, 0, 0, 0.6)',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
@@ -427,7 +449,8 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor:
+      'rgba(255, 255, 255, 0.2)',
   },
 
   shutterInner: {
@@ -449,7 +472,8 @@ const styles = StyleSheet.create({
 
   goalBanner: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor:
+      'rgba(0,0,0,0.7)',
     color: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 10,

@@ -8,9 +8,20 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+  Stack,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
+import {
+  getCurrentUser,
+  getFriendId,
+  getFriendProfile,
+  getFriendshipPet,
+  getUserStats,
+} from '../../../lib/friendships';
 
 interface AccountabilityGoal {
   id: string;
@@ -21,18 +32,31 @@ interface AccountabilityGoal {
 }
 
 export default function FriendshipHomeScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } =
+    useLocalSearchParams<{ id: string }>();
+
   const router = useRouter();
 
-  const [friendName, setFriendName] = useState('Your Buddy');
+  const [friendName, setFriendName] =
+    useState('Your Buddy');
 
-  const [petName, setPetName] = useState('Buddy');
-  const [heartCount, setHeartCount] = useState(3);
-  const [streakDays, setStreakDays] = useState(0);
-  const [coins, setCoins] = useState(0);
+  const [petName, setPetName] =
+    useState('Buddy');
 
-  const [goals, setGoals] = useState<AccountabilityGoal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [heartCount, setHeartCount] =
+    useState(3);
+
+  const [streakDays, setStreakDays] =
+    useState(0);
+
+  const [coins, setCoins] =
+    useState(0);
+
+  const [goals, setGoals] =
+    useState<AccountabilityGoal[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
     loadFriendship();
@@ -43,69 +67,36 @@ export default function FriendshipHomeScreen() {
       setLoading(true);
 
       if (!id) {
-        throw new Error('Friendship ID is missing.');
-      }
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error('You must be logged in.');
+        throw new Error(
+          'Friendship ID is missing.'
+        );
       }
 
       /*
        * ------------------------------------------------
-       * 1. GET THE FRIENDSHIP
+       * 1. GET CURRENT USER
        * ------------------------------------------------
        */
 
-      const { data: friendship, error: friendshipError } =
-        await supabase
-          .from('friendships')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-      if (friendshipError) {
-        throw friendshipError;
-      }
-
-      const friendId =
-        friendship.user_a_id === user.id
-          ? friendship.user_b_id
-          : friendship.user_a_id;
-
-      if (!friendId) {
-        throw new Error('Could not find your friend.');
-      }
+      const user = await getCurrentUser();
 
       /*
        * ------------------------------------------------
-       * 2. GET FRIEND'S PROFILE
+       * 2. GET FRIEND
        * ------------------------------------------------
-       *
-       * The profiles table currently has:
-       * id
-       * username
-       * created_at
-       *
-       * It does NOT have display_name.
        */
 
-      const { data: profile, error: profileError } =
-        await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', friendId)
-          .maybeSingle();
+      const friendId = await getFriendId(
+        id,
+        user.id
+      );
 
-      if (profileError) {
-        throw profileError;
-      }
+      const profile =
+        await getFriendProfile(friendId);
 
-      setFriendName(profile?.username || 'Your Buddy');
+      setFriendName(
+        profile?.username || 'Your Buddy'
+      );
 
       /*
        * ------------------------------------------------
@@ -113,29 +104,28 @@ export default function FriendshipHomeScreen() {
        * ------------------------------------------------
        */
 
-      const { data: pet, error: petError } =
-        await supabase
-          .from('pets')
-          .select('*')
-          .eq('friendship_id', id)
-          .maybeSingle();
-
-      if (petError) {
-        throw petError;
-      }
+      const pet =
+        await getFriendshipPet(id);
 
       if (pet) {
-        setPetName(pet.name || 'Buddy');
+        setPetName(
+          pet.name || 'Buddy'
+        );
 
         /*
          * Pet health is stored from 0-100.
          * Convert it to 0-3 hearts for the UI.
          */
-        const health = pet.health ?? 100;
+
+        const health =
+          pet.health ?? 100;
 
         const hearts = Math.max(
           0,
-          Math.min(3, Math.ceil(health / 33.34))
+          Math.min(
+            3,
+            Math.ceil(health / 33.34)
+          )
         );
 
         setHeartCount(hearts);
@@ -147,38 +137,37 @@ export default function FriendshipHomeScreen() {
        * ------------------------------------------------
        */
 
-      const { data: stats, error: statsError } =
-        await supabase
-          .from('user_stats')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-      if (statsError) {
-        throw statsError;
-      }
+      const stats =
+        await getUserStats(user.id);
 
       if (stats) {
-        setStreakDays(stats.streak_days || 0);
-        setCoins(stats.points || 0);
+        setStreakDays(
+          stats.streak_days || 0
+        );
+
+        setCoins(
+          stats.points || 0
+        );
       }
 
       /*
        * ------------------------------------------------
-       * 5. GET GOALS FOR THIS FRIENDSHIP
+       * 5. GET GOALS
        * ------------------------------------------------
        */
 
-      const { data: goalData, error: goalError } =
-        await supabase
-          .from('goals')
-          .select(
-            'id, title, is_verifiable, completed_by, completed_at, created_at'
-          )
-          .eq('friendship_id', id)
-          .order('created_at', {
-            ascending: false,
-          });
+      const {
+        data: goalData,
+        error: goalError,
+      } = await supabase
+        .from('goals')
+        .select(
+          'id, title, is_verifiable, completed_by, completed_at, created_at'
+        )
+        .eq('friendship_id', id)
+        .order('created_at', {
+          ascending: false,
+        });
 
       if (goalError) {
         throw goalError;
@@ -186,35 +175,53 @@ export default function FriendshipHomeScreen() {
 
       /*
        * ------------------------------------------------
-       * 6. GET PROOF STATUS FOR EACH GOAL
+       * 6. GET PROOF STATUS
        * ------------------------------------------------
        */
 
-      const formattedGoals = await Promise.all(
-        (goalData || []).map(async (goal) => {
-          const { data: proof } = await supabase
-            .from('goal_proofs')
-            .select('status')
-            .eq('goal_id', goal.id)
-            .order('created_at', {
-              ascending: false,
-            })
-            .limit(1)
-            .maybeSingle();
+      const formattedGoals =
+        await Promise.all(
+          (goalData || []).map(
+            async (goal) => {
+              const {
+                data: proof,
+              } = await supabase
+                .from('goal_proofs')
+                .select('status')
+                .eq(
+                  'goal_id',
+                  goal.id
+                )
+                .order(
+                  'created_at',
+                  {
+                    ascending: false,
+                  }
+                )
+                .limit(1)
+                .maybeSingle();
 
-          return {
-            id: goal.id,
-            title: goal.title,
-            isVerifiable: goal.is_verifiable,
-            completed: goal.completed_by !== null,
-            verifiedByFriend: proof?.status === 'approved',
-          };
-        })
-      );
+              return {
+                id: goal.id,
+                title: goal.title,
+                isVerifiable:
+                  goal.is_verifiable,
+                completed:
+                  goal.completed_by !== null,
+                verifiedByFriend:
+                  proof?.status ===
+                  'approved',
+              };
+            }
+          )
+        );
 
       setGoals(formattedGoals);
     } catch (error) {
-      console.error('Failed to load friendship:', error);
+      console.error(
+        'Failed to load friendship:',
+        error
+      );
 
       Alert.alert(
         'Error',
@@ -228,6 +235,7 @@ export default function FriendshipHomeScreen() {
   /*
    * Render the pet's health as 3 hearts.
    */
+
   const renderHearts = () => {
     const hearts = [];
 
@@ -251,13 +259,17 @@ export default function FriendshipHomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View
+        style={styles.loadingContainer}
+      >
         <ActivityIndicator
           size="large"
           color="#6C5CE7"
         />
 
-        <Text style={styles.loadingText}>
+        <Text
+          style={styles.loadingText}
+        >
           Loading friendship...
         </Text>
       </View>
@@ -269,9 +281,12 @@ export default function FriendshipHomeScreen() {
       <Stack.Screen
         options={{
           title: `${friendName} & You`,
+
           headerRight: () => (
             <TouchableOpacity
-              style={styles.shopHeaderBtn}
+              style={
+                styles.shopHeaderBtn
+              }
               onPress={() =>
                 router.push(
                   `/friendship/${id}/shop`
@@ -285,7 +300,11 @@ export default function FriendshipHomeScreen() {
                 color="#6C5CE7"
               />
 
-              <Text style={styles.shopBtnText}>
+              <Text
+                style={
+                  styles.shopBtnText
+                }
+              >
                 Shop
               </Text>
             </TouchableOpacity>
@@ -294,31 +313,41 @@ export default function FriendshipHomeScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={
+          styles.scrollContent
+        }
       >
         {/* TOP STATUS BAR */}
 
         <View style={styles.statsRow}>
-          <View style={styles.statBadge}>
+          <View
+            style={styles.statBadge}
+          >
             <Ionicons
               name="flame"
               size={20}
               color="#FF7675"
             />
 
-            <Text style={styles.statText}>
+            <Text
+              style={styles.statText}
+            >
               {streakDays} Day Streak
             </Text>
           </View>
 
-          <View style={styles.statBadge}>
+          <View
+            style={styles.statBadge}
+          >
             <Ionicons
               name="sparkles"
               size={18}
               color="#FDCB6E"
             />
 
-            <Text style={styles.statText}>
+            <Text
+              style={styles.statText}
+            >
               {coins} Coins
             </Text>
           </View>
@@ -327,22 +356,38 @@ export default function FriendshipHomeScreen() {
         {/* PET HOME CARD */}
 
         <View style={styles.petCard}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.petEmoji}>
+          <View
+            style={
+              styles.avatarContainer
+            }
+          >
+            <Text
+              style={styles.petEmoji}
+            >
               🐐
             </Text>
           </View>
 
-          <Text style={styles.petName}>
+          <Text
+            style={styles.petName}
+          >
             {petName}
           </Text>
 
-          <View style={styles.healthContainer}>
-            <Text style={styles.healthLabel}>
+          <View
+            style={
+              styles.healthContainer
+            }
+          >
+            <Text
+              style={styles.healthLabel}
+            >
               Pet Health:
             </Text>
 
-            <View style={styles.heartsRow}>
+            <View
+              style={styles.heartsRow}
+            >
               {renderHearts()}
             </View>
           </View>
@@ -350,21 +395,37 @@ export default function FriendshipHomeScreen() {
 
         {/* ACCOUNTABILITY GOALS */}
 
-        <View style={styles.goalsSection}>
-          <View style={styles.sectionHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>
+        <View
+          style={styles.goalsSection}
+        >
+          <View
+            style={styles.sectionHeader}
+          >
+            <View
+              style={{ flex: 1 }}
+            >
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
                 Your Accountability Goals
               </Text>
 
-              <Text style={styles.sectionSubtitle}>
-                Completed by you, checked off by{' '}
-                {friendName}
+              <Text
+                style={
+                  styles.sectionSubtitle
+                }
+              >
+                Completed by you, checked
+                off by {friendName}
               </Text>
             </View>
 
             <TouchableOpacity
-              style={styles.addGoalBtn}
+              style={
+                styles.addGoalBtn
+              }
               onPress={() =>
                 router.push(
                   `/friendship/${id}/create-goal`
@@ -380,18 +441,34 @@ export default function FriendshipHomeScreen() {
           </View>
 
           {goals.length === 0 ? (
-            <View style={styles.emptyGoals}>
-              <Text style={styles.emptyEmoji}>
+            <View
+              style={
+                styles.emptyGoals
+              }
+            >
+              <Text
+                style={
+                  styles.emptyEmoji
+                }
+              >
                 🎯
               </Text>
 
-              <Text style={styles.emptyTitle}>
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
                 No goals yet
               </Text>
 
-              <Text style={styles.emptyText}>
-                Add an accountability goal to get
-                started.
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                Add an accountability
+                goal to get started.
               </Text>
             </View>
           ) : (
@@ -400,7 +477,11 @@ export default function FriendshipHomeScreen() {
                 key={item.id}
                 style={styles.goalCard}
               >
-                <View style={styles.goalMainInfo}>
+                <View
+                  style={
+                    styles.goalMainInfo
+                  }
+                >
                   <Ionicons
                     name={
                       item.completed
@@ -413,11 +494,15 @@ export default function FriendshipHomeScreen() {
                         ? '#00B894'
                         : '#B2BEC3'
                     }
-                    style={styles.checkIcon}
+                    style={
+                      styles.checkIcon
+                    }
                   />
 
                   <View
-                    style={styles.goalTextContainer}
+                    style={
+                      styles.goalTextContainer
+                    }
                   >
                     <Text
                       style={[
@@ -430,7 +515,9 @@ export default function FriendshipHomeScreen() {
                     </Text>
 
                     <Text
-                      style={styles.statusSubtext}
+                      style={
+                        styles.statusSubtext
+                      }
                     >
                       {item.verifiedByFriend
                         ? `Verified by ${friendName}`
@@ -448,15 +535,20 @@ export default function FriendshipHomeScreen() {
                 {item.isVerifiable &&
                   !item.verifiedByFriend && (
                     <TouchableOpacity
-                      style={styles.cameraBtn}
+                      style={
+                        styles.cameraBtn
+                      }
                       onPress={() =>
                         router.push({
                           pathname:
                             '/friendship/[id]/camera',
                           params: {
-                            id: id as string,
-                            goalId: item.id,
-                            goalTitle: item.title,
+                            id:
+                              id as string,
+                            goalId:
+                              item.id,
+                            goalTitle:
+                              item.title,
                           },
                         })
                       }

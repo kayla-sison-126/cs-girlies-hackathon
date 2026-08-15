@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
   View,
@@ -10,7 +11,7 @@ import {
   Switch,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { supabase } from '../../../lib/supabase';
+import { createGoal } from '../../../lib/goals';
 
 export default function CreateGoalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,7 +22,7 @@ export default function CreateGoalScreen() {
   const [isVerifiable, setIsVerifiable] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  async function createGoal() {
+  async function handleCreateGoal() {
     try {
       if (!id) {
         Alert.alert(
@@ -41,46 +42,18 @@ export default function CreateGoalScreen() {
 
       setSaving(true);
 
-      /*
-       * Get the currently logged-in user.
-       */
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error(
-          'You must be logged in to create a goal.'
-        );
-      }
-
-      /*
-       * Create the goal in Supabase.
-       */
-      const { error: goalError } = await supabase
-        .from('goals')
-        .insert({
-          friendship_id: id,
-          created_by: user.id,
-          title: title.trim(),
-          description:
-            description.trim() || null,
-          is_verifiable: isVerifiable,
-        });
-
-      if (goalError) {
-        throw goalError;
-      }
+      await createGoal(
+        id,
+        title,
+        description,
+        isVerifiable
+      );
 
       Alert.alert(
         'Goal Created!',
         'Your new accountability goal has been added.'
       );
 
-      /*
-       * Return to the friendship page.
-       */
       router.back();
     } catch (error: any) {
       console.error(
@@ -159,7 +132,7 @@ export default function CreateGoalScreen() {
             styles.createButton,
             saving && styles.disabledButton,
           ]}
-          onPress={createGoal}
+          onPress={handleCreateGoal}
           disabled={saving}
         >
           {saving ? (
@@ -255,3 +228,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
