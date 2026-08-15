@@ -1,168 +1,485 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../../lib/supabase';
 
 interface AccountabilityGoal {
   id: string;
   title: string;
   completed: boolean;
   verifiedByFriend: boolean;
+  isVerifiable: boolean;
 }
 
 export default function FriendshipHomeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  // Mock mapping for friend names (replace with Supabase query later)
-  const friendNames: Record<string, string> = {
-    '1': 'Parineet',
-    'f1': 'Parineet',
-    '2': 'Alex',
-  };
+  const [friendName, setFriendName] = useState('Your Buddy');
 
-  const friendName = (id && friendNames[id]) || 'Your Buddy';
+  const [petName, setPetName] = useState('Buddy');
+  const [heartCount, setHeartCount] = useState(3);
+  const [streakDays, setStreakDays] = useState(0);
+  const [coins, setCoins] = useState(0);
 
-  // Mock State
-  const [petName, setPetName] = useState('Barnaby the Goat');
-  const [heartCount, setHeartCount] = useState<number>(2); // 0 to 3 hearts
-  const [streakDays, setStreakDays] = useState<number>(12);
-  const [coins, setCoins] = useState<number>(350);
+  const [goals, setGoals] = useState<AccountabilityGoal[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [goals, setGoals] = useState<AccountabilityGoal[]>([
-    { id: '1', title: 'Study 1 hr focus session', completed: true, verifiedByFriend: true },
-    { id: '2', title: 'Log 8k steps today', completed: false, verifiedByFriend: false },
-    { id: '3', title: 'Drink 64oz water', completed: false, verifiedByFriend: false },
-  ]);
+  useEffect(() => {
+    loadFriendship();
+  }, [id]);
 
-  // Helper to render 0 to 3 hearts
+  async function loadFriendship() {
+    try {
+      setLoading(true);
+
+      if (!id) {
+        throw new Error('Friendship ID is missing.');
+      }
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('You must be logged in.');
+      }
+
+      /*
+       * ------------------------------------------------
+       * 1. GET THE FRIENDSHIP
+       * ------------------------------------------------
+       */
+
+      const { data: friendship, error: friendshipError } =
+        await supabase
+          .from('friendships')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+      if (friendshipError) {
+        throw friendshipError;
+      }
+
+      const friendId =
+        friendship.user_a_id === user.id
+          ? friendship.user_b_id
+          : friendship.user_a_id;
+
+      if (!friendId) {
+        throw new Error('Could not find your friend.');
+      }
+
+      /*
+       * ------------------------------------------------
+       * 2. GET FRIEND'S PROFILE
+       * ------------------------------------------------
+       */
+
+      const { data: profile, error: profileError } =
+        await supabase
+          .from('profiles')
+          .select('display_name, username')
+          .eq('id', friendId)
+          .maybeSingle();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      setFriendName(
+        profile?.display_name ||
+          profile?.username ||
+          'Your Buddy'
+      );
+
+      /*
+       * ------------------------------------------------
+       * 3. GET SHARED PET
+       * ------------------------------------------------
+       */
+
+      const { data: pet, error: petError } =
+        await supabase
+          .from('pets')
+          .select('*')
+          .eq('friendship_id', id)
+          .maybeSingle();
+
+      if (petError) {
+        throw petError;
+      }
+
+      if (pet) {
+        setPetName(pet.name || 'Buddy');
+
+        /*
+         * Pet health is stored from 0-100.
+         * Convert it to 0-3 hearts for the UI.
+         */
+        const health = pet.health ?? 100;
+
+        const hearts = Math.max(
+          0,
+          Math.min(3, Math.ceil(health / 33.34))
+        );
+
+        setHeartCount(hearts);
+      }
+
+      /*
+       * ------------------------------------------------
+       * 4. GET USER STATS
+       * ------------------------------------------------
+       */
+
+      const { data: stats, error: statsError } =
+        await supabase
+          .from('user_stats')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (statsError) {
+        throw statsError;
+      }
+
+      if (stats) {
+        setStreakDays(stats.streak_days || 0);
+        setCoins(stats.points || 0);
+      }
+
+      /*
+       * ------------------------------------------------
+       * 5. GET GOALS FOR THIS FRIENDSHIP
+       * ------------------------------------------------
+       */
+
+      const { data: goalData, error: goalError } =
+        await supabase
+          .from('goals')
+          .select(
+            'id, title, is_verifiable, completed_by, completed_at, created_at'
+          )
+          .eq('friendship_id', id)
+          .order('created_at', {
+            ascending: false,
+          });
+
+      if (goalError) {
+        throw goalError;
+      }
+
+      /*
+       * ------------------------------------------------
+       * 6. GET PROOF STATUS FOR EACH GOAL
+       * ------------------------------------------------
+       */
+
+      const formattedGoals = await Promise.all(
+        (goalData || []).map(async (goal) => {
+          const { data: proof } = await supabase
+            .from('goal_proofs')
+            .select('status')
+            .eq('goal_id', goal.id)
+            .order('created_at', {
+              ascending: false,
+            })
+            .limit(1)
+            .maybeSingle();
+
+          return {
+            id: goal.id,
+            title: goal.title,
+            isVerifiable: goal.is_verifiable,
+            completed: goal.completed_by !== null,
+            verifiedByFriend: proof?.status === 'approved',
+          };
+        })
+      );
+
+      setGoals(formattedGoals);
+    } catch (error) {
+      console.error(
+        'Failed to load friendship:',
+        error
+      );
+
+      Alert.alert(
+        'Error',
+        'Could not load this friendship.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /*
+   * Render the pet's health as 3 hearts.
+   */
   const renderHearts = () => {
     const hearts = [];
+
     for (let i = 1; i <= 3; i++) {
       hearts.push(
         <Ionicons
           key={i}
-          name={i <= heartCount ? 'heart' : 'heart-outline'}
+          name={
+            i <= heartCount
+              ? 'heart'
+              : 'heart-outline'
+          }
           size={24}
           color="#FF7675"
         />
       );
     }
+
     return hearts;
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color="#6C5CE7"
+        />
+
+        <Text style={styles.loadingText}>
+          Loading friendship...
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header Setup */}
       <Stack.Screen
         options={{
           title: `${friendName} & You`,
           headerRight: () => (
             <TouchableOpacity
               style={styles.shopHeaderBtn}
-              onPress={() => router.push(`/friendship/${id}/shop`)}
+              onPress={() =>
+                router.push(
+                  `/friendship/${id}/shop`
+                )
+              }
               activeOpacity={0.7}
             >
-              <Ionicons name="bag-handle" size={18} color="#6C5CE7" />
-              <Text style={styles.shopBtnText}>Shop</Text>
+              <Ionicons
+                name="bag-handle"
+                size={18}
+                color="#6C5CE7"
+              />
+
+              <Text style={styles.shopBtnText}>
+                Shop
+              </Text>
             </TouchableOpacity>
           ),
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* TOP STATUS BAR: Currency & Streak */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* TOP STATUS BAR */}
+
         <View style={styles.statsRow}>
           <View style={styles.statBadge}>
-            <Ionicons name="flame" size={20} color="#FF7675" />
-            <Text style={styles.statText}>{streakDays} Day Streak</Text>
+            <Ionicons
+              name="flame"
+              size={20}
+              color="#FF7675"
+            />
+
+            <Text style={styles.statText}>
+              {streakDays} Day Streak
+            </Text>
           </View>
 
           <View style={styles.statBadge}>
-            <Ionicons name="sparkles" size={18} color="#FDCB6E" />
-            <Text style={styles.statText}>{coins} Coins</Text>
+            <Ionicons
+              name="sparkles"
+              size={18}
+              color="#FDCB6E"
+            />
+
+            <Text style={styles.statText}>
+              {coins} Coins
+            </Text>
           </View>
         </View>
 
         {/* PET HOME CARD */}
+
         <View style={styles.petCard}>
           <View style={styles.avatarContainer}>
-            <Text style={styles.petEmoji}>🐐</Text>
+            <Text style={styles.petEmoji}>
+              🐐
+            </Text>
           </View>
 
-          <Text style={styles.petName}>{petName}</Text>
+          <Text style={styles.petName}>
+            {petName}
+          </Text>
 
-          {/* 0 to 3 Hearts Health Bar */}
           <View style={styles.healthContainer}>
-            <Text style={styles.healthLabel}>Pet Health:</Text>
-            <View style={styles.heartsRow}>{renderHearts()}</View>
+            <Text style={styles.healthLabel}>
+              Pet Health:
+            </Text>
+
+            <View style={styles.heartsRow}>
+              {renderHearts()}
+            </View>
           </View>
         </View>
 
-        {/* YOUR ACCOUNTABILITY GOALS SECTION */}
+        {/* ACCOUNTABILITY GOALS */}
+
         <View style={styles.goalsSection}>
           <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Your Accountability Goals</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>
+                Your Accountability Goals
+              </Text>
+
               <Text style={styles.sectionSubtitle}>
-                Completed by you, checked off by {friendName}
+                Completed by you, checked off by{' '}
+                {friendName}
               </Text>
             </View>
-            <TouchableOpacity style={styles.addGoalBtn}>
-              <Ionicons name="add-circle" size={26} color="#6C5CE7" />
+
+            <TouchableOpacity
+              style={styles.addGoalBtn}
+              onPress={() => {
+                Alert.alert(
+                  'Coming Soon',
+                  'Goal creation will be added next.'
+                );
+              }}
+            >
+              <Ionicons
+                name="add-circle"
+                size={26}
+                color="#6C5CE7"
+              />
             </TouchableOpacity>
           </View>
 
-          {goals.map((item) => (
-            <View key={item.id} style={styles.goalCard}>
-              <View style={styles.goalMainInfo}>
-                <Ionicons
-                  name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={24}
-                  color={item.completed ? '#00B894' : '#B2BEC3'}
-                  style={styles.checkIcon}
-                />
-                <View style={styles.goalTextContainer}>
-                  <Text
-                    style={[
-                      styles.goalTitle,
-                      item.completed && styles.goalCompletedText,
-                    ]}
-                  >
-                    {item.title}
-                  </Text>
-                  <Text style={styles.statusSubtext}>
-                    {item.verifiedByFriend
-                      ? `Verified by ${friendName}`
-                      : item.completed
-                      ? `Awaiting ${friendName}'s review`
-                      : `Needs proof submission`}
-                  </Text>
-                </View>
-              </View>
+          {goals.length === 0 ? (
+            <View style={styles.emptyGoals}>
+              <Text style={styles.emptyEmoji}>
+                🎯
+              </Text>
 
-              {/* CAMERA PROOF BUTTON */}
-              <TouchableOpacity
-                style={styles.cameraBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: '/friendship/[id]/camera',
-                    params: { id: id as string, goalTitle: item.title },
-                  })
-                }
-                activeOpacity={0.7}
-              >
-                <Ionicons name="camera" size={18} color="#FFFFFF" />
-                <Text style={styles.cameraBtnText}>Snap Proof</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyTitle}>
+                No goals yet
+              </Text>
+
+              <Text style={styles.emptyText}>
+                Add an accountability goal to get started.
+              </Text>
             </View>
-          ))}
+          ) : (
+            goals.map((item) => (
+              <View
+                key={item.id}
+                style={styles.goalCard}
+              >
+                <View style={styles.goalMainInfo}>
+                  <Ionicons
+                    name={
+                      item.completed
+                        ? 'checkmark-circle'
+                        : 'ellipse-outline'
+                    }
+                    size={24}
+                    color={
+                      item.completed
+                        ? '#00B894'
+                        : '#B2BEC3'
+                    }
+                    style={styles.checkIcon}
+                  />
+
+                  <View
+                    style={styles.goalTextContainer}
+                  >
+                    <Text
+                      style={[
+                        styles.goalTitle,
+                        item.completed &&
+                          styles.goalCompletedText,
+                      ]}
+                    >
+                      {item.title}
+                    </Text>
+
+                    <Text
+                      style={styles.statusSubtext}
+                    >
+                      {item.verifiedByFriend
+                        ? `Verified by ${friendName}`
+                        : item.completed
+                        ? `Awaiting ${friendName}'s review`
+                        : item.isVerifiable
+                        ? 'Needs proof submission'
+                        : 'Not completed yet'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* CAMERA PROOF BUTTON */}
+
+                {item.isVerifiable &&
+                  !item.verifiedByFriend && (
+                    <TouchableOpacity
+                      style={styles.cameraBtn}
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            '/friendship/[id]/camera',
+                          params: {
+                            id: id as string,
+                            goalId: item.id,
+                            goalTitle: item.title,
+                          },
+                        })
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="camera"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+
+                      <Text
+                        style={
+                          styles.cameraBtnText
+                        }
+                      >
+                        Snap Proof
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -174,10 +491,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+
   scrollContent: {
     padding: 16,
     paddingBottom: 32,
   },
+
   shopHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -188,16 +520,19 @@ const styles = StyleSheet.create({
     marginRight: 8,
     gap: 6,
   },
+
   shopBtnText: {
     color: '#6C5CE7',
     fontWeight: '700',
     fontSize: 14,
   },
+
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
   },
+
   statBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -211,11 +546,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+
   statText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#2D3436',
   },
+
   petCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -227,6 +564,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: 20,
   },
+
   avatarContainer: {
     width: 110,
     height: 110,
@@ -236,51 +574,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+
   petEmoji: {
     fontSize: 56,
   },
+
   petName: {
     fontSize: 20,
     fontWeight: '700',
     color: '#2D3436',
     marginBottom: 10,
   },
+
   healthContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+
   healthLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#636E72',
   },
+
   heartsRow: {
     flexDirection: 'row',
     gap: 4,
   },
+
   goalsSection: {
     gap: 12,
   },
+
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 4,
   },
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2D3436',
   },
+
   sectionSubtitle: {
     fontSize: 12,
     color: '#636E72',
     marginTop: 2,
   },
+
   addGoalBtn: {
     paddingLeft: 8,
   },
+
   goalCard: {
     backgroundColor: '#FFFFFF',
     padding: 14,
@@ -291,30 +640,37 @@ const styles = StyleSheet.create({
     elevation: 1,
     gap: 12,
   },
+
   goalMainInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
   checkIcon: {
     marginRight: 10,
   },
+
   goalTextContainer: {
     flex: 1,
   },
+
   goalTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#2D3436',
   },
+
   goalCompletedText: {
     textDecorationLine: 'line-through',
     color: '#B2BEC3',
   },
+
   statusSubtext: {
     fontSize: 12,
     color: '#636E72',
     marginTop: 2,
   },
+
   cameraBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,9 +682,35 @@ const styles = StyleSheet.create({
     gap: 6,
     alignSelf: 'flex-start',
   },
+
   cameraBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  emptyGoals: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 30,
+    alignItems: 'center',
+  },
+
+  emptyEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D3436',
+  },
+
+  emptyText: {
+    fontSize: 13,
+    color: '#636E72',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });

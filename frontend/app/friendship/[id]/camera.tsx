@@ -6,18 +6,27 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../../lib/supabase';
 
 export default function FriendCameraScreen() {
-  const { id, goalTitle } = useLocalSearchParams<{ id: string; goalTitle?: string }>();
+  const { id, goalId, goalTitle } = useLocalSearchParams<{
+    id: string;
+    goalId?: string;
+    goalTitle?: string;
+  }>();
+
   const router = useRouter();
 
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const cameraRef = useRef<CameraView>(null);
 
@@ -28,41 +37,181 @@ export default function FriendCameraScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>We need your permission to show the camera</Text>
-        <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-          <Text style={styles.permissionBtnText}>Grant Permission</Text>
+        <Text style={styles.permissionText}>
+          We need your permission to show the camera
+        </Text>
+
+        <TouchableOpacity
+          style={styles.permissionBtn}
+          onPress={requestPermission}
+        >
+          <Text style={styles.permissionBtnText}>
+            Grant Permission
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   const toggleCameraFacing = () => {
-    setFacing((current) => (current === 'back' ? 'front' : 'back'));
+    setFacing((current) =>
+      current === 'back' ? 'front' : 'back'
+    );
   };
 
   const takePicture = async () => {
-    if (cameraRef.current) {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
+    if (!cameraRef.current) return;
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+      });
+
       if (photo?.uri) {
         setPhotoUri(photo.uri);
       }
+    } catch (error) {
+      console.error('Failed to take picture:', error);
+
+      Alert.alert(
+        'Camera Error',
+        'Could not take the photo. Please try again.'
+      );
     }
   };
 
-  const submitProof = () => {
-    // TODO: Upload photo to Supabase storage & mark goal as submitted
-    router.back();
+  const submitProof = async () => {
+    if (!photoUri) {
+      Alert.alert(
+        'No Photo',
+        'Please take a photo before submitting.'
+      );
+      return;
+    }
+
+    if (!goalId) {
+      Alert.alert(
+        'Goal Missing',
+        'This proof is not connected to a goal yet.'
+      );
+      return;
+    }
+
+    if (uploading) return;
+
+    setUploading(true);
+
+    try {
+      // Get the currently logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        throw new Error(
+          'You must be logged in to submit proof.'
+        );
+      }
+
+      /*
+       * Convert the camera's local URI into an ArrayBuffer.
+       * Supabase Storage can upload this directly.
+       */
+      const response = await fetch(photoUri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      /*
+       * Give every uploaded photo its own unique path.
+       *
+       * Example:
+       * user-id/goal-id/1723456789012.jpg
+       */
+      const filePath = `${user.id}/${goalId}/${Date.now()}.jpg`;
+
+      // Upload the photo to the existing goal-proofs bucket
+      const { error: uploadError } = await supabase.storage
+        .from('goal-proofs')
+        .upload(filePath, arrayBuffer, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      /*
+       * The goal-proofs bucket is public,
+       * so we can create a public URL for the image.
+       */
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from('goal-proofs')
+        .getPublicUrl(filePath);
+
+      /*
+       * Save the proof in the goal_proofs database table.
+       *
+       * It starts as "pending" because the friend
+       * still needs to review it.
+       */
+      const { error: proofError } = await supabase
+        .from('goal_proofs')
+        .insert({
+          goal_id: goalId,
+          submitted_by: user.id,
+          image_url: publicUrl,
+          status: 'pending',
+        });
+
+      if (proofError) {
+        throw proofError;
+      }
+
+      Alert.alert(
+        'Proof Submitted! 🎉',
+        'Your friend can now review your proof.'
+      );
+
+      // Return to the friendship page
+      router.back();
+    } catch (error: any) {
+      console.error('Proof submission error:', error);
+
+      Alert.alert(
+        'Submission Failed',
+        error?.message ||
+          'Something went wrong while submitting your proof.'
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Hide default header so camera can take full screen */}
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen
+        options={{
+          headerShown: false,
+        }}
+      />
 
       {photoUri ? (
-        // PREVIEW MODE
+        // =========================
+        // PHOTO PREVIEW MODE
+        // =========================
         <View style={styles.fullScreen}>
-          <Image source={{ uri: photoUri }} style={styles.previewImage} />
+          <Image
+            source={{ uri: photoUri }}
+            style={styles.previewImage}
+          />
+
           <SafeAreaView style={styles.previewOverlay}>
             <Text style={styles.goalBanner}>
               Proof for: {goalTitle || 'Accountability Goal'}
@@ -70,54 +219,102 @@ export default function FriendCameraScreen() {
 
             <View style={styles.previewActionRow}>
               <TouchableOpacity
-                style={[styles.actionBtn, styles.retakeBtn]}
+                style={[
+                  styles.actionBtn,
+                  styles.retakeBtn,
+                ]}
                 onPress={() => setPhotoUri(null)}
+                disabled={uploading}
               >
-                <Ionicons name="refresh" size={20} color="#2D3436" />
-                <Text style={styles.retakeBtnText}>Retake</Text>
+                <Ionicons
+                  name="refresh"
+                  size={20}
+                  color="#2D3436"
+                />
+
+                <Text style={styles.retakeBtnText}>
+                  Retake
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionBtn, styles.submitBtn]}
+                style={[
+                  styles.actionBtn,
+                  styles.submitBtn,
+                  uploading && styles.disabledBtn,
+                ]}
                 onPress={submitProof}
+                disabled={uploading}
               >
-                <Ionicons name="send" size={18} color="#FFFFFF" />
-                <Text style={styles.submitBtnText}>Send Proof</Text>
+                {uploading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="send"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+
+                    <Text style={styles.submitBtnText}>
+                      Send Proof
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </SafeAreaView>
         </View>
       ) : (
+        // =========================
         // CAMERA MODE
+        // =========================
         <View style={styles.fullScreen}>
-          {/* Absolutely positioned CameraView to prevent crashes */}
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={facing} />
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFillObject}
+            facing={facing}
+          />
 
           <SafeAreaView style={styles.cameraOverlay}>
-            {/* Top Bar with Back Button */}
+            {/* Top Bar */}
             <View style={styles.topBar}>
               <TouchableOpacity
                 style={styles.backBtn}
                 onPress={() => router.back()}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <Ionicons
+                  name="arrow-back"
+                  size={24}
+                  color="#FFFFFF"
+                />
               </TouchableOpacity>
 
               {goalTitle && (
                 <View style={styles.goalTag}>
-                  <Text style={styles.goalTagText} numberOfLines={1}>
+                  <Text
+                    style={styles.goalTagText}
+                    numberOfLines={1}
+                  >
                     Target: {goalTitle}
                   </Text>
                 </View>
               )}
 
-              <TouchableOpacity style={styles.flipBtn} onPress={toggleCameraFacing}>
-                <Ionicons name="camera-reverse" size={24} color="#FFFFFF" />
+              <TouchableOpacity
+                style={styles.flipBtn}
+                onPress={toggleCameraFacing}
+              >
+                <Ionicons
+                  name="camera-reverse"
+                  size={24}
+                  color="#FFFFFF"
+                />
               </TouchableOpacity>
             </View>
 
-            {/* Bottom Shutter Controls */}
+            {/* Shutter */}
             <View style={styles.bottomControls}>
               <TouchableOpacity
                 style={styles.shutterOuter}
@@ -139,10 +336,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
+
   fullScreen: {
     flex: 1,
     position: 'relative',
   },
+
   permissionContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -150,33 +349,39 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#F8F9FA',
   },
+
   permissionText: {
     textAlign: 'center',
     fontSize: 16,
     color: '#2D3436',
     marginBottom: 16,
   },
+
   permissionBtn: {
     backgroundColor: '#6C5CE7',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
   },
+
   permissionBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
+
   cameraOverlay: {
     flex: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
+
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 12,
   },
+
   backBtn: {
     width: 44,
     height: 44,
@@ -185,6 +390,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   flipBtn: {
     width: 44,
     height: 44,
@@ -193,6 +399,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   goalTag: {
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     paddingHorizontal: 14,
@@ -200,15 +407,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     maxWidth: '60%',
   },
+
   goalTagText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
   },
+
   bottomControls: {
     alignItems: 'center',
     marginBottom: 24,
   },
+
   shutterOuter: {
     width: 76,
     height: 76,
@@ -219,20 +429,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
+
   shutterInner: {
     width: 60,
     height: 60,
     borderRadius: 30,
     backgroundColor: '#FFFFFF',
   },
+
   previewImage: {
     ...StyleSheet.absoluteFillObject,
   },
+
   previewOverlay: {
     flex: 1,
     justifyContent: 'space-between',
     padding: 20,
   },
+
   goalBanner: {
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -243,11 +457,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
   },
+
   previewActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 20,
   },
+
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -255,17 +471,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 25,
     gap: 8,
+    minWidth: 120,
+    justifyContent: 'center',
   },
+
   retakeBtn: {
     backgroundColor: '#FFFFFF',
   },
+
   retakeBtnText: {
     color: '#2D3436',
     fontWeight: '700',
   },
+
   submitBtn: {
     backgroundColor: '#6C5CE7',
   },
+
+  disabledBtn: {
+    opacity: 0.6,
+  },
+
   submitBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
