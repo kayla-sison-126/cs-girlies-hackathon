@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -38,24 +39,37 @@ export default function SignUpScreen() {
     setLoading(true);
 
     try {
-      // TODO: Replace with Supabase Auth call:
-      // const { data, error } = await supabase.auth.signUp({
-      //   email,
-      //   password,
-      //   options: { data: { display_name: displayName } },
-      // });
-      // if (error) throw error;
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            username: displayName.trim(),
+          },
+        },
+      });
 
-      // Mock delay
-      setTimeout(() => {
-        setLoading(false);
-        Alert.alert('Account Created!', 'Welcome to the app!', [
-          { text: 'Let\'s Go', onPress: () => router.replace('/(tabs)') },
-        ]);
-      }, 1000);
+      if (error) {
+        throw error;
+      }
+
+      if (!data.user) {
+        throw new Error('Account could not be created.');
+      }
+
+      Alert.alert('Account Created!', 'Welcome to the app!', [
+        {
+          text: "Let's Go",
+          onPress: () => router.replace('/(tabs)'),
+        },
+      ]);
     } catch (err: any) {
+      Alert.alert(
+        'Sign Up Failed',
+        err.message || 'Something went wrong.'
+      );
+    } finally {
       setLoading(false);
-      Alert.alert('Sign Up Failed', err.message || 'Something went wrong.');
     }
   };
 
@@ -71,7 +85,6 @@ export default function SignUpScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* HEADER SECTION */}
           <View style={styles.headerSection}>
             <TouchableOpacity
               style={styles.backBtn}
@@ -90,10 +103,14 @@ export default function SignUpScreen() {
             </Text>
           </View>
 
-          {/* FORM SECTION */}
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#636E72" style={styles.inputIcon} />
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color="#636E72"
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Full Name / Display Name"
@@ -104,7 +121,12 @@ export default function SignUpScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#636E72" style={styles.inputIcon} />
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color="#636E72"
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Email address"
@@ -118,7 +140,12 @@ export default function SignUpScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#636E72" style={styles.inputIcon} />
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#636E72"
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Password (min. 6 chars)"
@@ -154,7 +181,6 @@ export default function SignUpScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* FOOTER */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/auth/login')}>

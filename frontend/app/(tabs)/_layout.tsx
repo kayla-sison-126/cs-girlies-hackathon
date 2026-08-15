@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function TabLayout() {
+export default function GlobalTabLayout() {
   return (
     <Tabs
       screenOptions={{
