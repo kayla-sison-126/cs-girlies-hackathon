@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { completeGoalWithRewards } from './rewards';
 
 export async function createGoal(
   friendshipId: string,
@@ -50,28 +51,27 @@ export async function getGoals(friendshipId: string) {
 
 export async function completeGoal(goalId: string) {
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error('You must be logged in.');
-  }
-
-  const { data, error } = await supabase
+    data: goal,
+    error: goalError,
+  } = await supabase
     .from('goals')
-    .update({
-      completed_by: user.id,
-      completed_at: new Date().toISOString(),
-    })
+    .select('is_verifiable, completed_at')
     .eq('id', goalId)
-    .eq('is_verifiable', false)
-    .select()
     .single();
 
-  if (error) {
-    throw error;
+  if (goalError) {
+    throw goalError;
   }
 
-  return data;
+  if (goal.is_verifiable) {
+    throw new Error(
+      'This goal requires photo proof from your partner.'
+    );
+  }
+
+  if (goal.completed_at) {
+    return goal;
+  }
+
+  return completeGoalWithRewards(goalId);
 }

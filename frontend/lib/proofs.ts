@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { completeGoalWithRewards } from './rewards';
 
 export async function submitProof(
   goalId: string,
@@ -35,6 +36,20 @@ export async function reviewProof(
   proofId: string,
   approved: boolean
 ) {
+  const { data: proof, error: proofError } = await supabase
+    .from('goal_proofs')
+    .select('*')
+    .eq('id', proofId)
+    .single();
+
+  if (proofError) {
+    throw proofError;
+  }
+
+  if (proof.status !== 'pending') {
+    throw new Error('This proof has already been reviewed.');
+  }
+
   const status = approved ? 'approved' : 'rejected';
 
   const { data, error } = await supabase
@@ -52,17 +67,7 @@ export async function reviewProof(
   }
 
   if (approved) {
-    const { error: goalError } = await supabase
-      .from('goals')
-      .update({
-        completed_by: data.submitted_by,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', data.goal_id);
-
-    if (goalError) {
-      throw goalError;
-    }
+    await completeGoalWithRewards(proof.goal_id);
   }
 
   return data;
