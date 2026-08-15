@@ -6,9 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,
-  TextInput,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -32,10 +29,6 @@ export default function StreakBuddiesScreen() {
   const [friendships, setFriendships] = useState<FriendshipCard[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [isAddBuddyOpen, setIsAddBuddyOpen] = useState(false);
-  const [pairingCode, setPairingCode] = useState('');
-  const [joiningBuddy, setJoiningBuddy] = useState(false);
-
   useEffect(() => {
     loadFriendships();
   }, []);
@@ -53,7 +46,7 @@ export default function StreakBuddiesScreen() {
         throw new Error('You must be logged in.');
       }
 
-      // Get all friendships involving the current user
+      // Get all friendships belonging to the current user
       const { data: friendshipData, error: friendshipError } =
         await supabase
           .from('friendships')
@@ -77,16 +70,15 @@ export default function StreakBuddiesScreen() {
               ? friendship.user_b_id
               : friendship.user_a_id;
 
-          // Skip friendships where there is no second user yet
+          // A friendship can exist before the second user joins
           if (!friendId) {
             return null;
           }
 
           // Get friend's profile
-          // Your profiles table has username, not display_name.
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username')
+            .select('*')
             .eq('id', friendId)
             .maybeSingle();
 
@@ -114,7 +106,10 @@ export default function StreakBuddiesScreen() {
 
           return {
             id: friendship.id,
-            friendName: profile?.username || 'Friend',
+            friendName:
+              profile?.display_name ||
+              profile?.username ||
+              'Friend',
             petName: pet?.name || 'Buddy',
             petEmoji: '🐾',
             streakDays: stats?.streak_days || 0,
@@ -138,100 +133,11 @@ export default function StreakBuddiesScreen() {
     }
   }
 
-  async function joinBuddy() {
-    const code = pairingCode.trim();
-
-    if (!code) {
-      Alert.alert(
-        'Enter a pairing code',
-        'Please enter your friend\'s pairing code.'
-      );
-      return;
-    }
-
-    try {
-      setJoiningBuddy(true);
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error('You must be logged in.');
-      }
-
-      // Find the friendship using the pairing code
-      const { data: friendship, error: friendshipError } =
-        await supabase
-          .from('friendships')
-          .select('*')
-          .eq('pairing_code', code)
-          .maybeSingle();
-
-      if (friendshipError) {
-        throw friendshipError;
-      }
-
-      if (!friendship) {
-        throw new Error('Invalid pairing code.');
-      }
-
-      // Prevent joining your own friendship
-      if (friendship.user_a_id === user.id) {
-        throw new Error(
-          'You cannot use your own pairing code.'
-        );
-      }
-
-      // Make sure this friendship is still waiting for someone
-      if (friendship.user_b_id) {
-        throw new Error(
-          'This pairing code has already been used.'
-        );
-      }
-
-      // Join the friendship
-      const { error: updateError } = await supabase
-        .from('friendships')
-        .update({
-          user_b_id: user.id,
-        })
-        .eq('id', friendship.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      Alert.alert(
-        'Buddy Connected! 🎉',
-        'You are now streak buddies!'
-      );
-
-      setPairingCode('');
-      setIsAddBuddyOpen(false);
-
-      await loadFriendships();
-    } catch (error: any) {
-      console.error('Failed to join buddy:', error);
-
-      Alert.alert(
-        'Could not connect',
-        error?.message || 'Something went wrong.'
-      );
-    } finally {
-      setJoiningBuddy(false);
-    }
-  }
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size="large"
-            color="#6C5CE7"
-          />
+          <ActivityIndicator size="large" color="#6C5CE7" />
 
           <Text style={styles.loadingText}>
             Loading your streak buddies...
@@ -244,32 +150,23 @@ export default function StreakBuddiesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerBar}>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.title}>
-            Streak Buddies 🐾
-          </Text>
+  <View>
+    <Text style={styles.title}>Streak Buddies 🐾</Text>
+    <Text style={styles.subtitle}>
+      Keep your pets alive together!
+    </Text>
+  </View>
 
-          <Text style={styles.subtitle}>
-            Keep your pets alive together!
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.addBuddyButton}
-          onPress={() => setIsAddBuddyOpen(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="person-add"
-            size={18}
-            color="#FFFFFF"
-          />
-
-          <Text style={styles.addBuddyText}>
-            Add Buddy
-          </Text>
-        </TouchableOpacity>
-      </View>
+  <TouchableOpacity
+    style={styles.logoutButton}
+    onPress={async () => {
+      await supabase.auth.signOut();
+      router.replace('/auth/login');
+    }}
+  >
+    <Text style={styles.logoutButtonText}>Log Out</Text>
+  </TouchableOpacity>
+</View>
 
       {friendships.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -284,9 +181,11 @@ export default function StreakBuddiesScreen() {
             together!
           </Text>
 
+          {/* ADD BUDDY BUTTON */}
           <TouchableOpacity
-            style={styles.emptyAddButton}
-            onPress={() => setIsAddBuddyOpen(true)}
+            style={styles.addBuddyButton}
+            onPress={() => router.push('/pairing')}
+            activeOpacity={0.8}
           >
             <Ionicons
               name="person-add"
@@ -294,7 +193,7 @@ export default function StreakBuddiesScreen() {
               color="#FFFFFF"
             />
 
-            <Text style={styles.emptyAddButtonText}>
+            <Text style={styles.addBuddyButtonText}>
               Add a Buddy
             </Text>
           </TouchableOpacity>
@@ -311,9 +210,7 @@ export default function StreakBuddiesScreen() {
               style={styles.card}
               activeOpacity={0.7}
               onPress={() =>
-                router.push(
-                  `/friendship/${item.id}` as any
-                )
+                router.push(`/friendship/${item.id}` as any)
               }
             >
               <View style={styles.cardHeader}>
@@ -355,88 +252,6 @@ export default function StreakBuddiesScreen() {
           )}
         />
       )}
-
-      {/* ADD BUDDY MODAL */}
-      <Modal
-        visible={isAddBuddyOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => {
-          if (!joiningBuddy) {
-            setIsAddBuddyOpen(false);
-          }
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>
-                  Add a Buddy 🐾
-                </Text>
-
-                <Text style={styles.modalSubtitle}>
-                  Enter your friend's pairing code.
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => {
-                  if (!joiningBuddy) {
-                    setIsAddBuddyOpen(false);
-                  }
-                }}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={28}
-                  color="#999"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>
-              Pairing Code
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Enter pairing code"
-              placeholderTextColor="#999"
-              value={pairingCode}
-              onChangeText={setPairingCode}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!joiningBuddy}
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.joinButton,
-                joiningBuddy && styles.disabledButton,
-              ]}
-              onPress={joinBuddy}
-              disabled={joiningBuddy}
-            >
-              {joiningBuddy ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons
-                    name="people"
-                    size={20}
-                    color="#FFFFFF"
-                  />
-
-                  <Text style={styles.joinButtonText}>
-                    Connect Buddy
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -451,14 +266,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-
-  headerTextContainer: {
-    flex: 1,
-    marginRight: 12,
   },
 
   title: {
@@ -471,22 +278,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 2,
-  },
-
-  addBuddyButton: {
-    backgroundColor: '#6C5CE7',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-
-  addBuddyText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
 
   listContainer: {
@@ -601,90 +392,36 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  emptyAddButton: {
-    backgroundColor: '#6C5CE7',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  emptyAddButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-  },
-
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-  },
-
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#444',
-    marginBottom: 8,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 16,
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-
-  joinButton: {
-    backgroundColor: '#6C5CE7',
-    paddingVertical: 14,
-    borderRadius: 12,
+  addBuddyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#6C5CE7',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 10,
     gap: 8,
   },
 
-  disabledButton: {
-    opacity: 0.6,
+  addBuddyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 
-  joinButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
+  logoutButton: {
+  marginTop: 10,
+  backgroundColor: '#FFE8E8',
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  borderRadius: 10,
+  alignSelf: 'flex-start',
+},
+
+logoutButtonText: {
+  color: '#FF6B6B',
+  fontWeight: '700',
+  fontSize: 13,
+},
 });
+

@@ -85,12 +85,19 @@ export default function FriendshipHomeScreen() {
        * ------------------------------------------------
        * 2. GET FRIEND'S PROFILE
        * ------------------------------------------------
+       *
+       * The profiles table currently has:
+       * id
+       * username
+       * created_at
+       *
+       * It does NOT have display_name.
        */
 
       const { data: profile, error: profileError } =
         await supabase
           .from('profiles')
-          .select('display_name, username')
+          .select('username')
           .eq('id', friendId)
           .maybeSingle();
 
@@ -98,11 +105,7 @@ export default function FriendshipHomeScreen() {
         throw profileError;
       }
 
-      setFriendName(
-        profile?.display_name ||
-        profile?.username ||
-        'Your Buddy'
-      );
+      setFriendName(profile?.username || 'Your Buddy');
 
       /*
        * ------------------------------------------------
@@ -211,10 +214,7 @@ export default function FriendshipHomeScreen() {
 
       setGoals(formattedGoals);
     } catch (error) {
-      console.error(
-        'Failed to load friendship:',
-        error
-      );
+      console.error('Failed to load friendship:', error);
 
       Alert.alert(
         'Error',
@@ -390,7 +390,8 @@ export default function FriendshipHomeScreen() {
               </Text>
 
               <Text style={styles.emptyText}>
-                Add an accountability goal to get started.
+                Add an accountability goal to get
+                started.
               </Text>
             </View>
           ) : (
@@ -422,7 +423,7 @@ export default function FriendshipHomeScreen() {
                       style={[
                         styles.goalTitle,
                         item.completed &&
-                        styles.goalCompletedText,
+                          styles.goalCompletedText,
                       ]}
                     >
                       {item.title}
@@ -434,10 +435,10 @@ export default function FriendshipHomeScreen() {
                       {item.verifiedByFriend
                         ? `Verified by ${friendName}`
                         : item.completed
-                          ? `Awaiting ${friendName}'s review`
-                          : item.isVerifiable
-                            ? 'Needs proof submission'
-                            : 'Not completed yet'}
+                        ? `Awaiting ${friendName}'s review`
+                        : item.isVerifiable
+                        ? 'Needs proof submission'
+                        : 'Not completed yet'}
                     </Text>
                   </View>
                 </View>
