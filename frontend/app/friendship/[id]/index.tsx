@@ -1,141 +1,334 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function PetHomeScreen() {
-  const { id } = useLocalSearchParams();
+interface AccountabilityGoal {
+  id: string;
+  title: string;
+  completed: boolean;
+  verifiedByFriend: boolean;
+}
+
+export default function FriendshipHomeScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  // Mock State for this friendship pet
-  const [petData, setPetData] = useState({
-    friendName: 'Sarah',
-    petName: 'Whiskers',
-    petEmoji: '🐱',
-    streakDays: 12,
-    hearts: 3,
-    maxHearts: 5,
-    coins: 150,
-    equippedHat: '🎩 Top Hat',
-    equippedAccessory: '🕶️ Sunglasses',
-  });
+  // Mock mapping for friend names (replace with Supabase query later)
+  const friendNames: Record<string, string> = {
+    '1': 'Parineet',
+    'f1': 'Parineet',
+    '2': 'Alex',
+  };
+
+  const friendName = (id && friendNames[id]) || 'Your Buddy';
+
+  // Mock State
+  const [petName, setPetName] = useState('Barnaby the Goat');
+  const [heartCount, setHeartCount] = useState<number>(2); // 0 to 3 hearts
+  const [streakDays, setStreakDays] = useState<number>(12);
+  const [coins, setCoins] = useState<number>(350);
+
+  const [goals, setGoals] = useState<AccountabilityGoal[]>([
+    { id: '1', title: 'Study 1 hr focus session', completed: true, verifiedByFriend: true },
+    { id: '2', title: 'Log 8k steps today', completed: false, verifiedByFriend: false },
+    { id: '3', title: 'Drink 64oz water', completed: false, verifiedByFriend: false },
+  ]);
+
+  // Helper to render 0 to 3 hearts
+  const renderHearts = () => {
+    const hearts = [];
+    for (let i = 1; i <= 3; i++) {
+      hearts.push(
+        <Ionicons
+          key={i}
+          name={i <= heartCount ? 'heart' : 'heart-outline'}
+          size={24}
+          color="#FF7675"
+        />
+      );
+    }
+    return hearts;
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/')}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>With {petData.friendName}</Text>
-        <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>💰 {petData.coins}</Text>
-        </View>
-      </View>
+    <View style={styles.container}>
+      {/* Header Setup */}
+      <Stack.Screen
+        options={{
+          title: `${friendName} & You`,
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.shopHeaderBtn}
+              onPress={() => router.push(`/friendship/${id}/shop`)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="bag-handle" size={18} color="#6C5CE7" />
+              <Text style={styles.shopBtnText}>Shop</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
 
-      <ScrollView contentContainerStyle={styles.content}>
-    
-        {/* Pet Stage Display */}
-        <View style={styles.petStage}>
-          {/* Accessories Overlay Display */}
-          <View style={styles.accessoriesRow}>
-            {petData.equippedHat ? <Text style={styles.equippedBadge}>{petData.equippedHat}</Text> : null}
-            {petData.equippedAccessory ? <Text style={styles.equippedBadge}>{petData.equippedAccessory}</Text> : null}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* TOP STATUS BAR: Currency & Streak */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBadge}>
+            <Ionicons name="flame" size={20} color="#FF7675" />
+            <Text style={styles.statText}>{streakDays} Day Streak</Text>
           </View>
 
-          <Text style={styles.petGraphic}>{petData.petEmoji}</Text>
-          <Text style={styles.petNameText}>{petData.petName}</Text>
-
-          {/* Hearts Health System */}
-          <View style={styles.heartsRow}>
-            {Array.from({ length: petData.maxHearts }).map((_, i) => (
-              <Ionicons
-                key={i}
-                name={i < petData.hearts ? 'heart' : 'heart-outline'}
-                size={28}
-                color="#FF6B6B"
-                style={{ marginHorizontal: 3 }}
-              />
-            ))}
+          <View style={styles.statBadge}>
+            <Ionicons name="sparkles" size={18} color="#FDCB6E" />
+            <Text style={styles.statText}>{coins} Coins</Text>
           </View>
-          <Text style={styles.heartsStatusText}>
-            {petData.hearts}/{petData.maxHearts} Health Remaining
-          </Text>
         </View>
 
-        {/* Streak Counter Card */}
-        <View style={styles.streakCard}>
-          <Text style={styles.streakFlame}>🔥</Text>
-          <Text style={styles.streakCount}>{petData.streakDays} Day Streak!</Text>
-          <Text style={styles.streakSub}>Keep completing goals to protect {petData.petName}</Text>
+        {/* PET HOME CARD */}
+        <View style={styles.petCard}>
+          <View style={styles.avatarContainer}>
+            <Text style={styles.petEmoji}>🐐</Text>
+          </View>
+
+          <Text style={styles.petName}>{petName}</Text>
+
+          {/* 0 to 3 Hearts Health Bar */}
+          <View style={styles.healthContainer}>
+            <Text style={styles.healthLabel}>Pet Health:</Text>
+            <View style={styles.heartsRow}>{renderHearts()}</View>
+          </View>
         </View>
 
-        {/* Nudge / Quick Action Bar */}
-        <TouchableOpacity
-          style={styles.nudgeBtn}
-          onPress={() => alert(`You nudged ${petData.friendName} to complete today's goals!`)}
-        >
-          <Ionicons name="notifications" size={20} color="#FFF" style={{ marginRight: 8 }} />
-          <Text style={styles.nudgeBtnText}>Nudge {petData.friendName}!</Text>
-        </TouchableOpacity>
+        {/* YOUR ACCOUNTABILITY GOALS SECTION */}
+        <View style={styles.goalsSection}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Your Accountability Goals</Text>
+              <Text style={styles.sectionSubtitle}>
+                Completed by you, checked off by {friendName}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.addGoalBtn}>
+              <Ionicons name="add-circle" size={26} color="#6C5CE7" />
+            </TouchableOpacity>
+          </View>
+
+          {goals.map((item) => (
+            <View key={item.id} style={styles.goalCard}>
+              <View style={styles.goalMainInfo}>
+                <Ionicons
+                  name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={24}
+                  color={item.completed ? '#00B894' : '#B2BEC3'}
+                  style={styles.checkIcon}
+                />
+                <View style={styles.goalTextContainer}>
+                  <Text
+                    style={[
+                      styles.goalTitle,
+                      item.completed && styles.goalCompletedText,
+                    ]}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text style={styles.statusSubtext}>
+                    {item.verifiedByFriend
+                      ? `Verified by ${friendName}`
+                      : item.completed
+                      ? `Awaiting ${friendName}'s review`
+                      : `Needs proof submission`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* CAMERA PROOF BUTTON */}
+              <TouchableOpacity
+                style={styles.cameraBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: '/friendship/[id]/camera',
+                    params: { id: id as string, goalTitle: item.title },
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <Ionicons name="camera" size={18} color="#FFFFFF" />
+                <Text style={styles.cameraBtnText}>Snap Proof</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF5F5' },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 15,
-    paddingBottom: 10,
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
   },
-  backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
-  coinBadge: { backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, elevation: 1 },
-  coinText: { fontWeight: '700', color: '#D97706', fontSize: 14 },
-
-  content: { padding: 20, alignItems: 'center' },
-  streakCard: {
-    backgroundColor: '#FFF',
-    width: '100%',
+  scrollContent: {
     padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    elevation: 2,
-    marginBottom: 20,
+    paddingBottom: 32,
   },
-  streakFlame: { fontSize: 28, marginBottom: 4 },
-  streakCount: { fontSize: 20, fontWeight: '800', color: '#FF6B6B' },
-  streakSub: { fontSize: 12, color: '#777', marginTop: 2 },
-
-  petStage: {
-    backgroundColor: '#FFF',
-    width: '100%',
-    paddingVertical: 30,
-    borderRadius: 20,
-    alignItems: 'center',
-    elevation: 2,
-    marginBottom: 20,
-  },
-  accessoriesRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  equippedBadge: { backgroundColor: '#F0F4F8', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, fontSize: 12, fontWeight: '600' },
-  petGraphic: { fontSize: 90, marginVertical: 10 },
-  petNameText: { fontSize: 22, fontWeight: '800', color: '#2C3E50', marginBottom: 8 },
-  heartsRow: { flexDirection: 'row', marginBottom: 6 },
-  heartsStatusText: { fontSize: 13, fontWeight: '600', color: '#888' },
-
-  nudgeBtn: {
-    backgroundColor: '#4A90E2',
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 14,
+  shopHeaderBtn: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EDEAFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    gap: 6,
+  },
+  shopBtnText: {
+    color: '#6C5CE7',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  statText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2D3436',
+  },
+  petCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 20,
+  },
+  avatarContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: '#FFEAA7',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  nudgeBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  petEmoji: {
+    fontSize: 56,
+  },
+  petName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D3436',
+    marginBottom: 10,
+  },
+  healthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  healthLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#636E72',
+  },
+  heartsRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  goalsSection: {
+    gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2D3436',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#636E72',
+    marginTop: 2,
+  },
+  addGoalBtn: {
+    paddingLeft: 8,
+  },
+  goalCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    gap: 12,
+  },
+  goalMainInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkIcon: {
+    marginRight: 10,
+  },
+  goalTextContainer: {
+    flex: 1,
+  },
+  goalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2D3436',
+  },
+  goalCompletedText: {
+    textDecorationLine: 'line-through',
+    color: '#B2BEC3',
+  },
+  statusSubtext: {
+    fontSize: 12,
+    color: '#636E72',
+    marginTop: 2,
+  },
+  cameraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6C5CE7',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  cameraBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
