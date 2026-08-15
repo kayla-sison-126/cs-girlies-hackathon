@@ -100,8 +100,8 @@ export default function FriendshipHomeScreen() {
 
       setFriendName(
         profile?.display_name ||
-          profile?.username ||
-          'Your Buddy'
+        profile?.username ||
+        'Your Buddy'
       );
 
       /*
@@ -365,12 +365,11 @@ export default function FriendshipHomeScreen() {
 
             <TouchableOpacity
               style={styles.addGoalBtn}
-              onPress={() => {
-                Alert.alert(
-                  'Coming Soon',
-                  'Goal creation will be added next.'
-                );
-              }}
+              onPress={() =>
+                router.push(
+                  `/friendship/${id}/create-goal`
+                )
+              }
             >
               <Ionicons
                 name="add-circle"
@@ -423,7 +422,7 @@ export default function FriendshipHomeScreen() {
                       style={[
                         styles.goalTitle,
                         item.completed &&
-                          styles.goalCompletedText,
+                        styles.goalCompletedText,
                       ]}
                     >
                       {item.title}
@@ -435,10 +434,10 @@ export default function FriendshipHomeScreen() {
                       {item.verifiedByFriend
                         ? `Verified by ${friendName}`
                         : item.completed
-                        ? `Awaiting ${friendName}'s review`
-                        : item.isVerifiable
-                        ? 'Needs proof submission'
-                        : 'Not completed yet'}
+                          ? `Awaiting ${friendName}'s review`
+                          : item.isVerifiable
+                            ? 'Needs proof submission'
+                            : 'Not completed yet'}
                     </Text>
                   </View>
                 </View>
