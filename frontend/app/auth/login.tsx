@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -31,18 +32,23 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // TODO: Replace with Supabase Auth call:
-      // const { error } = await supabase.auth.signInWithPassword({ email, password });
-      // if (error) throw error;
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-      // Mock delay for UI testing
-      setTimeout(() => {
-        setLoading(false);
-        router.replace('/(tabs)');
-      }, 1000);
+      if (error) {
+        throw error;
+      }
+
+      router.replace('/(tabs)');
     } catch (err: any) {
+      Alert.alert(
+        'Login Failed',
+        err.message || 'Check your email and password.'
+      );
+    } finally {
       setLoading(false);
-      Alert.alert('Login Failed', err.message || 'Check your credentials.');
     }
   };
 
@@ -54,7 +60,6 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.innerContainer}
       >
-        {/* HERO / LOGO SECTION */}
         <View style={styles.headerSection}>
           <View style={styles.logoBadge}>
             <Text style={styles.logoEmoji}>🐐</Text>
@@ -65,10 +70,14 @@ export default function LoginScreen() {
           </Text>
         </View>
 
-        {/* FORM SECTION */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#636E72" style={styles.inputIcon} />
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color="#636E72"
+              style={styles.inputIcon}
+            />
             <TextInput
               style={styles.input}
               placeholder="Email address"
@@ -82,7 +91,12 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#636E72" style={styles.inputIcon} />
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color="#636E72"
+              style={styles.inputIcon}
+            />
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -122,7 +136,6 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* FOOTER SWITCH */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => router.push('/auth/signup')}>
