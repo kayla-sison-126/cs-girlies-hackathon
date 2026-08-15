@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,12 +15,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 
-const MOCK_ACTIVE_GOALS = [
-  { id: 'g1', friendshipId: 'f1', friendName: 'Sarah', title: 'Take a 10-min walk' },
-  { id: 'g3', friendshipId: 'f2', friendName: 'Alex', title: 'Study for 1 hour' },
-  { id: 'g5', friendshipId: 'f3', friendName: 'Maya', title: 'Gym Workout' },
-];
-
 export default function GlobalCameraScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -36,7 +30,88 @@ export default function GlobalCameraScreen() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const [goals, setGoals] = useState<
+    {
+      id: string;
+      friendshipId: string;
+      title: string;
+      friendName: string;
+    }[]
+  >([]);
+
+  const [loadingGoals, setLoadingGoals] = useState(true);
+
   const cameraRef = useRef<CameraView>(null);
+
+  const loadGoals = async () => {
+    try {
+      setLoadingGoals(true);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        throw new Error('You must be logged in.');
+      }
+
+      const { data, error } = await supabase
+        .from('goals')
+        .select(`
+          id,
+          friendship_id,
+          title,
+          friendships (
+            user_a_id,
+            user_b_id
+          )
+        `);
+
+      if (error) {
+        throw error;
+      }
+
+      const formattedGoals = (data || []).map((goal: any) => {
+        const friendship = goal.friendships;
+
+        const friendId =
+          friendship.user_a_id === user.id
+            ? friendship.user_b_id
+            : friendship.user_a_id;
+
+        return {
+          id: goal.id,
+          friendshipId: goal.friendship_id,
+          title: goal.title,
+          friendName: friendId || 'Friend',
+        };
+      });
+
+      setGoals(formattedGoals);
+    } catch (error: any) {
+      console.error('Error loading goals:', error);
+
+      Alert.alert(
+        'Could not load goals',
+        error?.message || 'Something went wrong.'
+      );
+    } finally {
+      setLoadingGoals(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGoals();
+  }, []);
+
+  const currentSelectedGoal = goals.find(
+    (goal) => goal.id === selectedGoalId
+  );
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -71,10 +146,6 @@ export default function GlobalCameraScreen() {
     }
   };
 
-  const currentSelectedGoal = MOCK_ACTIVE_GOALS.find(
-    (goal) => goal.id === selectedGoalId
-  );
-
   const handleSubmitProof = async () => {
     if (!selectedGoalId) {
       Alert.alert(
@@ -106,10 +177,6 @@ export default function GlobalCameraScreen() {
         throw new Error('You must be logged in to submit proof.');
       }
 
-      /*
-       * Convert the local camera URI into an ArrayBuffer
-       * that Supabase Storage can upload.
-       */
       const response = await fetch(capturedPhoto);
       const arrayBuffer = await response.arrayBuffer();
 
@@ -126,19 +193,12 @@ export default function GlobalCameraScreen() {
         throw uploadError;
       }
 
-      /*
-       * Because the bucket is public, we can create
-       * a public URL for the uploaded image.
-       */
       const {
         data: { publicUrl },
       } = supabase.storage
         .from('goal-proofs')
         .getPublicUrl(filePath);
 
-      /*
-       * Save the proof information in the database.
-       */
       const { error: proofError } = await supabase
         .from('goal_proofs')
         .insert({
@@ -165,7 +225,8 @@ export default function GlobalCameraScreen() {
 
       Alert.alert(
         'Submission Failed',
-        error?.message || 'Something went wrong while submitting your proof.'
+        error?.message ||
+          'Something went wrong while submitting your proof.'
       );
     } finally {
       setUploading(false);
@@ -267,41 +328,51 @@ export default function GlobalCameraScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <FlatList
-                  data={MOCK_ACTIVE_GOALS}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.goalOption,
-                        selectedGoalId === item.id &&
-                          styles.selectedGoalOption,
-                      ]}
-                      onPress={() => {
-                        setSelectedGoalId(item.id);
-                        setIsPickerOpen(false);
-                      }}
-                    >
-                      <View>
-                        <Text style={styles.optionTitle}>
-                          {item.title}
-                        </Text>
+                {loadingGoals ? (
+                  <Text style={styles.loadingText}>
+                    Loading goals...
+                  </Text>
+                ) : goals.length === 0 ? (
+                  <Text style={styles.loadingText}>
+                    No active goals found.
+                  </Text>
+                ) : (
+                  <FlatList
+                    data={goals}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.goalOption,
+                          selectedGoalId === item.id &&
+                            styles.selectedGoalOption,
+                        ]}
+                        onPress={() => {
+                          setSelectedGoalId(item.id);
+                          setIsPickerOpen(false);
+                        }}
+                      >
+                        <View>
+                          <Text style={styles.optionTitle}>
+                            {item.title}
+                          </Text>
 
-                        <Text style={styles.optionBuddy}>
-                          Buddy: {item.friendName}
-                        </Text>
-                      </View>
+                          <Text style={styles.optionBuddy}>
+                            Buddy: {item.friendName}
+                          </Text>
+                        </View>
 
-                      {selectedGoalId === item.id && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={22}
-                          color="#FF6B6B"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  )}
-                />
+                        {selectedGoalId === item.id && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color="#FF6B6B"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
               </View>
             </View>
           </Modal>
@@ -497,6 +568,12 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+
+  loadingText: {
+    textAlign: 'center',
+    color: '#666',
+    paddingVertical: 20,
   },
 
   modalOverlay: {
