@@ -87,7 +87,7 @@ export default function CreateGoalScreen() {
 
       setSaving(true);
 
-      await createGoal(id, title.trim(), null, selectedUserId, isVerifiable);
+      await createGoal(id, title.trim(), "", selectedUserId, isVerifiable);
 
       Alert.alert('Goal Created!', 'Your new goal has been added.');
       router.back();
