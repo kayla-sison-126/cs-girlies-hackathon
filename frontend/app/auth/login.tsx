@@ -103,11 +103,11 @@ export default function LoginScreen() {
             <View style={styles.card}>
 
             <View style={styles.field}>
-              <Text style={styles.inputLabel}>Username</Text>
+              <Text style={styles.inputLabel}>Email</Text>
               <View style={styles.roundedInputWrap}>
                 <TextInput
                   style={styles.roundedInput}
-                  placeholder="Username"
+                  placeholder="Email"
                   placeholderTextColor="#CEB59F"
                   value={email}
                   onChangeText={setEmail}
