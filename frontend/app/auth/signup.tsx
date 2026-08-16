@@ -11,13 +11,24 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import { useFonts } from 'expo-font';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function SignUpScreen() {
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    Itim: require('../../assets/fonts/Itim.ttf'),
+  });
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -64,241 +75,297 @@ export default function SignUpScreen() {
         },
       ]);
     } catch (err: any) {
-      Alert.alert(
-        'Sign Up Failed',
-        err.message || 'Something went wrong.'
-      );
+      Alert.alert('Sign Up Failed', err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <LinearGradient colors={['#CEE1EF', '#E1EEF6']} style={styles.container}>
+      <StatusBar hidden />
+      <SafeAreaView style={{ flex: 1 }}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.innerContainer}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.innerContainer}
         >
-          <View style={styles.headerSection}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-back" size={24} color="#2D3436" />
-            </TouchableOpacity>
-
-            <View style={styles.logoBadge}>
-              <Text style={styles.logoEmoji}>✨</Text>
-            </View>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              Join your friends and start holding each other accountable.
-            </Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color="#636E72"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name / Display Name"
-                placeholderTextColor="#B2BEC3"
-                value={displayName}
-                onChangeText={setDisplayName}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.headerSection}>
+              <Image
+                source={require('../../assets/images/GoatTogetherTitle.png')}
+                style={styles.heroImage}
+                resizeMode="contain"
+                accessible={true}
+                accessibilityLabel="Goat Together title"
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color="#636E72"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email address"
-                placeholderTextColor="#B2BEC3"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+            <View style={styles.cardWrap}>
+              <Text style={styles.loginTitle}>Sign Up</Text>
+
+              {/* <View style={styles.card}> */}
+                <View style={styles.card}>
+                <View style={styles.field}>
+                  <Text style={styles.inputLabel}>Username</Text>
+                  <View style={styles.roundedInputWrap}>
+                    <TextInput
+                      style={styles.roundedInput}
+                      placeholder="Username"
+                      placeholderTextColor="#CEB59F"
+                      value={displayName}
+                      onChangeText={setDisplayName}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.inputLabel}>Email</Text>
+                  <View style={styles.roundedInputWrap}>
+                    <TextInput
+                      style={styles.roundedInput}
+                      placeholder="Email"
+                      placeholderTextColor="#CEB59F"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.inputLabel}>Password</Text>
+                  <View style={styles.roundedInputWrap}>
+                    <TextInput
+                      style={styles.roundedInput}
+                      placeholder="Password"
+                      placeholderTextColor="#CEB59F"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={18}
+                        color="#8A5E4B"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={handleSignUp}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FEF9F0" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Create Account</Text>
+                  )}
+                </TouchableOpacity>
+                </View>
+              {/* </View> */}
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color="#636E72"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Password (min. 6 chars)"
-                placeholderTextColor="#B2BEC3"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color="#636E72"
-                />
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => router.push('/auth/login')}>
+                <Text style={styles.linkText}>Log In</Text>
               </TouchableOpacity>
             </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={handleSignUp}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Sign Up</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/auth/login')}>
-              <Text style={styles.linkText}>Log In</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Image
+          source={require('../../assets/images/auth/GrayGoatAndHill.png')}
+          style={styles.hills}
+          accessible={false}
+        />
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
   },
   innerContainer: {
     flex: 1,
+    paddingHorizontal: 22,
+    paddingTop: 0,
+    paddingBottom: 20,
+    zIndex: 2,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    justifyContent: 'center',
     flexGrow: 1,
+    justifyContent: 'flex-start',
+    paddingTop: 15,
+    paddingHorizontal: 10,
+    overflow: 'visible',
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 28,
-    position: 'relative',
-  },
-  backBtn: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#EDEAFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 12,
-  },
-  logoEmoji: {
-    fontSize: 36,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#2D3436',
     marginBottom: 8,
+    marginTop: 8,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#636E72',
-    textAlign: 'center',
-    paddingHorizontal: 16,
-    lineHeight: 20,
+  heroImage: {
+    width: SCREEN_WIDTH * 0.72,
+    height: (SCREEN_WIDTH * 0.72) * 0.38,
+    maxWidth: 320,
+    maxHeight: 110,
   },
-  form: {
-    gap: 16,
+  cardWrap: {
+    width: '100%',
+    marginTop: 0,
+    alignItems: 'flex-start',
+    zIndex: 2,
   },
-  inputContainer: {
+  loginTitle: {
+    alignSelf: 'flex-start',
+    marginLeft: 0,
+    marginBottom: -2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#824A20',
+    fontSize: 18,
+    fontFamily: 'Itim',
+    fontWeight: '700',
+  },
+  card: {
+    width: '100%',
+    alignSelf: 'stretch',
+    backgroundColor: '#FDF5E6',
+    borderRadius: 24,
+    borderWidth: 8,
+    borderColor: '#C7967D',
+    padding: 14,
+    marginTop: 8,shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+
+  // shadowContainer: {
+  //   width: '100%',
+  //   alignSelf: 'stretch',
+  //   marginTop: 8,
+  //   paddingHorizontal: 8,
+  //   // Shadow for iOS
+  //   shadowColor: '#8a6b59',
+  //   shadowOffset: { width: 6, height: 6 },
+  //   shadowOpacity: 0.2,
+  //   shadowRadius: 6,
+  //   // Elevation for Android
+  //   elevation: 6,
+  //   // Allow shadow to be visible outside bounds
+  //   overflow: 'visible',
+  //   zIndex: 3,
+  // },
+  field: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    color: '#824A20',
+    fontWeight: '700',
+    fontSize: 16,
+    fontFamily: 'Itim',
+    marginBottom: 6,
+  },
+  roundedInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#DFE6E9',
+    backgroundColor: '#FEF9F0',
+    borderRadius: 22,
+    borderWidth: 6,
+    borderColor: '#C7967D',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    width: '100%',
+    alignSelf: 'stretch',
   },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
+  roundedInput: {
     flex: 1,
+    height: 40,
     fontSize: 15,
-    color: '#2D3436',
+    color: '#824A20',
+    fontFamily: 'Itim',
   },
-  eyeIcon: {
-    padding: 6,
+  eyeBtn: {
+    paddingLeft: 8,
+    paddingRight: 4,
   },
   primaryBtn: {
-    backgroundColor: '#6C5CE7',
-    height: 52,
-    borderRadius: 12,
-    justifyContent: 'center',
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#729AB5',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 26,
     alignItems: 'center',
-    marginTop: 12,
-    shadowColor: '#6C5CE7',
-    shadowOpacity: 0.3,
+    justifyContent: 'center',
+    shadowColor: '#356072',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
     shadowRadius: 6,
-    elevation: 3,
   },
   primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: '#FEF9F0',
     fontWeight: '700',
+    fontSize: 18,
+    fontFamily: 'Itim',
   },
-  footer: {
+  footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 28,
+    marginTop: 12,
+    marginBottom: 24,
+    zIndex: 2,
   },
   footerText: {
-    color: '#636E72',
     fontSize: 14,
+    color: '#824A20',
+    fontFamily: 'Itim',
   },
   linkText: {
-    color: '#6C5CE7',
-    fontSize: 14,
+    color: '#824A20',
     fontWeight: '700',
+    textDecorationLine: 'underline',
+    marginLeft: 4,
+    fontFamily: 'Itim',
+  },
+  hills: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * 0.48,
+    resizeMode: 'cover',
+    zIndex: 0,
   },
 });

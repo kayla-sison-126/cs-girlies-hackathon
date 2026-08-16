@@ -134,6 +134,17 @@ export default function LoginScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                 />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color="#8A5E4B"
+                  />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -222,7 +233,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginLeft: 0,
     marginBottom: -4,
-    backgroundColor: '#CEE1EF',
     paddingHorizontal: 8,
     paddingVertical: 4,
     color: '#824A20',
@@ -248,6 +258,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   roundedInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FEF9F0',
     borderRadius: 22,
     borderWidth: 4.5,
@@ -262,10 +274,15 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   roundedInput: {
+    flex: 1,
     height: 40,
     fontSize: 15,
     color: '#824A20',
     fontFamily: 'Itim',
+  },
+  eyeBtn: {
+    paddingLeft: 8,
+    paddingRight: 4,
   },
   forgotBtn: {
     marginLeft: 12,
