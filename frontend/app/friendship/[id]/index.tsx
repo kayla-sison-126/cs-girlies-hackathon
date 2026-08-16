@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,17 @@ import {
   Alert,
   Image,
   Modal,
-} from 'react-native';
+  Dimensions,
+} from "react-native";
+import Svg, { Path } from "react-native-svg";
 import {
   useLocalSearchParams,
   useRouter,
   Stack,
   useFocusEffect,
-} from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useFonts } from 'expo-font';
+} from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useFonts } from "expo-font";
 
 import {
   getCurrentUser,
@@ -26,10 +28,10 @@ import {
   getFriendProfile,
   getFriendshipPet,
   getUserStats,
-} from '../../../lib/friendships';
+} from "../../../lib/friendships";
 
-import { getGoals } from '../../../lib/goals';
-import { getLatestGoalProofStatus } from '../../../lib/proofs';
+import { getGoals } from "../../../lib/goals";
+import { getLatestGoalProofStatus } from "../../../lib/proofs";
 
 interface AccountabilityGoal {
   id: string;
@@ -41,15 +43,16 @@ interface AccountabilityGoal {
 }
 
 export default function FriendshipHomeScreen() {
+  const { width: SCREEN_WIDTH } = Dimensions.get("window");
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const [fontsLoaded] = useFonts({
-    Itim: require('../../../assets/fonts/Itim.ttf'),
+    Itim: require("../../../assets/fonts/Itim.ttf"),
   });
 
-  const [friendName, setFriendName] = useState('Friend');
-  const [petName, setPetName] = useState('Buttercup');
+  const [friendName, setFriendName] = useState("Friend");
+  const [petName, setPetName] = useState("Buttercup");
   const [heartCount, setHeartCount] = useState(4);
   const [streakDays, setStreakDays] = useState(15);
   const [coins, setCoins] = useState(410);
@@ -57,31 +60,32 @@ export default function FriendshipHomeScreen() {
   const [goals, setGoals] = useState<AccountabilityGoal[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedGoalForReview, setSelectedGoalForReview] = useState<AccountabilityGoal | null>(null);
+  const [selectedGoalForReview, setSelectedGoalForReview] =
+    useState<AccountabilityGoal | null>(null);
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       loadFriendship();
-    }, [id])
+    }, [id]),
   );
 
   async function loadFriendship() {
     try {
       setLoading(true);
 
-      if (!id) throw new Error('Friendship ID is missing.');
+      if (!id) throw new Error("Friendship ID is missing.");
 
       const user = await getCurrentUser();
       await getFriendship(id);
 
       const friendId = await getFriendId(id, user.id);
       const profile = await getFriendProfile(friendId);
-      setFriendName(profile?.username || 'Buddy');
+      setFriendName(profile?.username || "Buddy");
 
       const pet = await getFriendshipPet(id);
       if (pet) {
-        setPetName(pet.name || 'Buttercup');
+        setPetName(pet.name || "Buttercup");
         const health = pet.health ?? 100;
         const hearts = Math.max(0, Math.min(5, Math.ceil(health / 20)));
         setHeartCount(hearts);
@@ -98,7 +102,8 @@ export default function FriendshipHomeScreen() {
         (goalData || []).map(async (goal: any) => {
           const proofStatus = await getLatestGoalProofStatus(goal.id);
 
-          const targetUser = goal.assigned_to ?? goal.target_user_id ?? goal.user_id;
+          const targetUser =
+            goal.assigned_to ?? goal.target_user_id ?? goal.user_id;
           const isForMe = String(targetUser) === String(user.id);
 
           return {
@@ -106,16 +111,16 @@ export default function FriendshipHomeScreen() {
             title: goal.title,
             isVerifiable: goal.is_verifiable,
             completed: goal.completed_by !== null,
-            verifiedByFriend: proofStatus === 'approved',
+            verifiedByFriend: proofStatus === "approved",
             assignedToUser: isForMe,
           };
-        })
+        }),
       );
 
       setGoals(formattedGoals);
     } catch (error) {
-      console.error('Failed to load friendship:', error);
-      Alert.alert('Error', 'Could not load this friendship.');
+      console.error("Failed to load friendship:", error);
+      Alert.alert("Error", "Could not load this friendship.");
     } finally {
       setLoading(false);
     }
@@ -127,12 +132,12 @@ export default function FriendshipHomeScreen() {
   };
 
   const handleApprove = () => {
-    Alert.alert('Approved!', 'Goal proof approved.');
+    Alert.alert("Approved!", "Goal proof approved.");
     setIsReviewModalVisible(false);
   };
 
   const handleDeny = () => {
-    Alert.alert('Denied', 'Goal proof requested again.');
+    Alert.alert("Denied", "Goal proof requested again.");
     setIsReviewModalVisible(false);
   };
 
@@ -142,14 +147,19 @@ export default function FriendshipHomeScreen() {
       const isFilled = i <= heartCount;
       hearts.push(
         <View key={i} style={styles.heartContainer}>
-          <Ionicons name="heart" size={20} color="#824A20" style={styles.heartBorder} />
+          <Ionicons
+            name="heart"
+            size={20}
+            color="#824A20"
+            style={styles.heartBorder}
+          />
           <Ionicons
             name="heart"
             size={16}
-            color={isFilled ? '#E57373' : '#FCE4EC'}
+            color={isFilled ? "#E57373" : "#FCE4EC"}
             style={styles.heartInner}
           />
-        </View>
+        </View>,
       );
     }
     return hearts;
@@ -175,7 +185,10 @@ export default function FriendshipHomeScreen() {
       <View style={styles.fixedHeroContainer}>
         {/* Header */}
         <View style={styles.topHeader}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
             <Ionicons name="chevron-back" size={28} color="#824A20" />
           </TouchableOpacity>
 
@@ -203,7 +216,7 @@ export default function FriendshipHomeScreen() {
         {/* Goat Character */}
         <View style={styles.goatContainer}>
           <Image
-            source={require('../../../assets/images/friend/goat-main.png')}
+            source={require("../../../assets/images/friend/goat-main.png")}
             style={styles.goatImage}
             resizeMode="contain"
           />
@@ -214,10 +227,28 @@ export default function FriendshipHomeScreen() {
           <View style={styles.heartsRow}>{renderHearts()}</View>
 
           <View style={styles.streakBadge}>
-            <Ionicons name="checkmark-circle-outline" size={18} color="#824A20" />
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={18}
+              color="#824A20"
+            />
             <Text style={styles.streakText}>{streakDays}-Day Streak</Text>
           </View>
         </View>
+      </View>
+
+      {/* SVG GREEN HILL ARCH */}
+      <View style={styles.hillArchWrapper}>
+        <Svg
+          height="40"
+          width={SCREEN_WIDTH}
+          viewBox={`0 0 ${SCREEN_WIDTH} 40`}
+        >
+          <Path
+            d={`M 0,40 Q ${SCREEN_WIDTH / 2},-10 ${SCREEN_WIDTH},40 Z`}
+            fill="#A1C99B"
+          />
+        </Svg>
       </View>
 
       {/* SCROLLABLE CARD SHEET */}
@@ -225,25 +256,16 @@ export default function FriendshipHomeScreen() {
         style={styles.scrollSheet}
         showsVerticalScrollIndicator={false}
       >
-        {/* NATURAL GRASS HILL TRANSITION */}
-        <Image
-          source={require('../../../assets/images/GrassHill.png')}
-          style={styles.grassHillImage}
-          resizeMode="cover"
-        />
-
         <View style={styles.scrollContent}>
           {/* GOALS FOR FRIEND */}
-          <Text style={styles.sectionTitle}>
-            Check Off Goals for {friendName}
-          </Text>
+          <Text style={styles.sectionTitle}>{friendName}'s Goals</Text>
 
           {friendGoalsToReview.length === 0 ? (
             <View style={[styles.goalCard, styles.friendGoalCard]}>
               <View style={styles.goalInfo}>
                 <Text style={styles.goalTitle}>No pending goals</Text>
                 <Text style={styles.goalSubtext}>
-                  Goal Checker: You • Type: Photo Verification
+                  Verification: Self-Checked
                 </Text>
               </View>
             </View>
@@ -260,30 +282,40 @@ export default function FriendshipHomeScreen() {
                 <View style={styles.goalInfo}>
                   <Text style={styles.goalTitle}>{item.title}</Text>
                   <Text style={styles.goalSubtext}>
-                    Goal Checker: You • Type:{' '}
-                    {item.isVerifiable ? 'Photo Verification' : 'Check-Off'}
+                    Type:{" "}
+                    {item.isVerifiable
+                      ? "Photo Verification"
+                      : "Self Check-Off"}
                   </Text>
                 </View>
 
-                <TouchableOpacity
-                  style={styles.actionBtnBlue}
-                  onPress={() => handleOpenReviewModal(item)}
-                >
-                  <Text style={styles.actionBtnText}>Check Photo</Text>
-                </TouchableOpacity>
+                {item.completed ? (
+                  <View style={styles.actionBtnGray}>
+                    <Text style={styles.actionBtnText}>Completed</Text>
+                  </View>
+                ) : item.isVerifiable ? (
+                  <TouchableOpacity
+                    style={styles.actionBtnBlue}
+                    onPress={() => handleOpenReviewModal(item)}
+                  >
+                    <Text style={styles.actionBtnText}>Check Photo</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ))
           )}
 
           {/* YOUR GOALS */}
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Your Goals</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+            Your Goals
+          </Text>
 
           {myGoals.length === 0 ? (
             <View style={[styles.goalCard, styles.myGoalCard]}>
               <View style={styles.goalInfo}>
                 <Text style={styles.goalTitle}>No goals created yet</Text>
                 <Text style={styles.goalSubtext}>
-                  Goal Checker: {friendName} • Type: Photo Verification
+                  Verification: Photo approval from {friendName}
                 </Text>
               </View>
             </View>
@@ -300,8 +332,10 @@ export default function FriendshipHomeScreen() {
                 <View style={styles.goalInfo}>
                   <Text style={styles.goalTitle}>{item.title}</Text>
                   <Text style={styles.goalSubtext}>
-                    Goal Checker: {friendName} • Type:{' '}
-                    {item.isVerifiable ? 'Photo Verification' : 'Check-Off'}
+                    Type:{" "}
+                    {item.isVerifiable
+                      ? "Photo Verification"
+                      : "Self Check-Off"}
                   </Text>
                 </View>
 
@@ -309,20 +343,29 @@ export default function FriendshipHomeScreen() {
                   <View style={styles.actionBtnGray}>
                     <Text style={styles.actionBtnText}>Done!</Text>
                   </View>
-                ) : (
+                ) : item.isVerifiable ? (
                   <TouchableOpacity
                     style={styles.actionBtnBlue}
                     onPress={() =>
                       router.push({
-                        pathname: '/friendship/[id]/camera',
-                        params: { id: id as string, goalId: item.id, goalTitle: item.title },
+                        pathname: "/friendship/[id]/camera",
+                        params: {
+                          id: id as string,
+                          goalId: item.id,
+                          goalTitle: item.title,
+                        },
                       })
                     }
                   >
-                    <Ionicons name="camera-outline" size={18} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Ionicons
+                      name="camera-outline"
+                      size={18}
+                      color="#FFFFFF"
+                      style={{ marginRight: 4 }}
+                    />
                     <Text style={styles.actionBtnText}>Take Proof</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
             ))
           )}
@@ -358,7 +401,7 @@ export default function FriendshipHomeScreen() {
             <View style={styles.modalGoalBox}>
               <Text style={styles.modalGoalLabel}>Goal:</Text>
               <Text style={styles.modalGoalText}>
-                {selectedGoalForReview?.title || 'Walk outside for 10 min'}
+                {selectedGoalForReview?.title || "Walk outside for 10 min"}
               </Text>
             </View>
 
@@ -367,7 +410,10 @@ export default function FriendshipHomeScreen() {
             </View>
 
             <View style={styles.modalActionsRow}>
-              <TouchableOpacity style={styles.approveBtn} onPress={handleApprove}>
+              <TouchableOpacity
+                style={styles.approveBtn}
+                onPress={handleApprove}
+              >
                 <Text style={styles.modalBtnText}>Approve</Text>
               </TouchableOpacity>
 
@@ -385,35 +431,35 @@ export default function FriendshipHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#D2E7F5',
+    backgroundColor: "#D2E7F5",
   },
 
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#D2E7F5',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#D2E7F5",
   },
 
   loadingText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     marginTop: 12,
     fontSize: 16,
-    color: '#824A20',
+    color: "#824A20",
   },
 
   /* FIXED TOP HERO AREA */
   fixedHeroContainer: {
-    backgroundColor: '#D2E7F5',
+    backgroundColor: "#D2E7F5",
     paddingTop: 54,
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
 
   topHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
 
   backBtn: {
@@ -426,28 +472,28 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 26,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
     lineHeight: 28,
   },
 
   headerSubtitle: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 18,
-    color: '#824A20',
+    color: "#824A20",
   },
 
   headerRightActions: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     gap: 6,
   },
 
   shopBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#C7967D',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#C7967D",
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 18,
@@ -455,31 +501,31 @@ const styles = StyleSheet.create({
   },
 
   shopBtnText: {
-    fontFamily: 'Itim',
-    color: '#FFFFFF',
+    fontFamily: "Itim",
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   coinBadge: {
-    backgroundColor: '#FFFDF6',
+    backgroundColor: "#FFFDF6",
     borderWidth: 2,
-    borderColor: '#C7967D',
+    borderColor: "#C7967D",
     paddingHorizontal: 12,
     paddingVertical: 2,
     borderRadius: 14,
   },
 
   coinText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 13,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
   },
 
   goatContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 10,
     height: 160,
   },
@@ -490,97 +536,97 @@ const styles = StyleSheet.create({
   },
 
   statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 8,
     paddingHorizontal: 6,
   },
 
   heartsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
 
   heartContainer: {
     width: 22,
     height: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   heartBorder: {
-    position: 'absolute',
+    position: "absolute",
   },
 
   heartInner: {
-    position: 'absolute',
+    position: "absolute",
   },
 
   streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
 
   streakText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 15,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
   },
 
-  /* SCROLLABLE SHEET */
+  /* SCROLLABLE SHEET WRAPPER & HILL */
+  hillArchWrapper: {
+    width: "100%",
+    height: 35,
+    backgroundColor: "transparent",
+    overflow: "hidden",
+  },
+
   scrollSheet: {
     flex: 1,
-    backgroundColor: '#A1C99B',
-  },
-
-  grassHillImage: {
-    width: '100%',
-    height: 55,
-    marginTop: -15,
-    backgroundColor: '#D2E7F5',
+    backgroundColor: "#A1C99B",
   },
 
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 40,
   },
 
   sectionTitle: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 18,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
     marginBottom: 12,
   },
 
   /* GOAL CARDS */
   goalCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderRadius: 28,
     borderWidth: 3,
-    borderColor: '#C7967D',
+    borderColor: "#C7967D",
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 12,
   },
 
   friendGoalCard: {
-    backgroundColor: '#FFEBB9',
+    backgroundColor: "#FFEBB9",
   },
 
   myGoalCard: {
-    backgroundColor: '#FFFDF6',
+    backgroundColor: "#FFFDF6",
   },
 
   completedGoalCard: {
-    backgroundColor: '#E4DED4',
+    backgroundColor: "#E4DED4",
   },
 
   goalInfo: {
@@ -589,156 +635,156 @@ const styles = StyleSheet.create({
   },
 
   goalTitle: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 16,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
   },
 
   goalSubtext: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 11,
-    color: '#824A20',
+    color: "#824A20",
     marginTop: 2,
   },
 
   actionBtnBlue: {
-    flexDirection: 'row',
-    backgroundColor: '#729AB5',
+    flexDirection: "row",
+    backgroundColor: "#729AB5",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   actionBtnGray: {
-    backgroundColor: '#B0B0B0',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    backgroundColor: "#A3A099",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   actionBtnText: {
-    fontFamily: 'Itim',
-    color: '#FFFFFF',
+    fontFamily: "Itim",
+    color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   addGoalCardBtn: {
-    backgroundColor: '#FFFDF6',
+    backgroundColor: "#FFFDF6",
     borderWidth: 3,
-    borderColor: '#C7967D',
+    borderColor: "#C7967D",
     borderRadius: 28,
     paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 12,
   },
 
   addGoalCardText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 16,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
     marginTop: -2,
   },
 
   /* MODAL STYLES */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
 
   modalContent: {
-    width: '100%',
-    backgroundColor: '#FFFDF6',
+    width: "100%",
+    backgroundColor: "#FFFDF6",
     borderRadius: 28,
     borderWidth: 3,
-    borderColor: '#C7967D',
+    borderColor: "#C7967D",
     padding: 20,
   },
 
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
 
   modalTitle: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 22,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
   },
 
   modalGoalBox: {
-    backgroundColor: '#FFF8EC',
+    backgroundColor: "#FFF8EC",
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#C7967D',
+    borderColor: "#C7967D",
     padding: 14,
     marginBottom: 16,
   },
 
   modalGoalLabel: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 14,
-    color: '#824A20',
+    color: "#824A20",
   },
 
   modalGoalText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 16,
-    fontWeight: '700',
-    color: '#824A20',
+    fontWeight: "700",
+    color: "#824A20",
     marginTop: 4,
   },
 
   modalImageFrame: {
     height: 240,
-    backgroundColor: '#FFEBB9',
+    backgroundColor: "#FFEBB9",
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#C7967D',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#C7967D",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
 
   modalActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 12,
   },
 
   approveBtn: {
     flex: 1,
-    backgroundColor: '#729AB5',
+    backgroundColor: "#729AB5",
     paddingVertical: 12,
     borderRadius: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   denyBtn: {
     flex: 1,
-    backgroundColor: '#D9777F',
+    backgroundColor: "#D9777F",
     paddingVertical: 12,
     borderRadius: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   modalBtnText: {
-    fontFamily: 'Itim',
+    fontFamily: "Itim",
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
