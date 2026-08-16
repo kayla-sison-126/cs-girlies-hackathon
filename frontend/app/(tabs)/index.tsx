@@ -1,5 +1,4 @@
-
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { setLastTab } from '../../lib/lastTab';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 
@@ -44,7 +44,6 @@ type FriendRequest = {
   sender: {
     id: string;
     username: string | null;
-    display_name: string | null;
     pairing_code: string;
   } | null;
 };
@@ -67,6 +66,9 @@ export default function StreakBuddiesScreen() {
       loadFriendships();
     }, [])
   );
+  useEffect(() => {
+    setLastTab('/(tabs)/index');
+  }, []);
 
   async function loadFriendships() {
     try {

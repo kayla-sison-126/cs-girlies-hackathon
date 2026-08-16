@@ -13,7 +13,10 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
 import { supabase } from '../../lib/supabase';
+import { getLastTab } from '../../lib/lastTab';
 
 export default function GlobalCameraScreen() {
   const router = useRouter();
@@ -22,6 +25,28 @@ export default function GlobalCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [fontsLoaded] = useFonts({
+    Itim: require('../../assets/fonts/Itim.ttf'),
+  });
+
+  const handleBack = () => {
+    // 1. Check if an explicit returnTo route was passed in params
+    const returnTo = params.returnTo as string | undefined;
+    if (returnTo) {
+      router.push(returnTo as any);
+      return;
+    }
+
+    // 2. Check the last recorded tab
+    const last = getLastTab();
+    if (last && last !== '/(tabs)/camera') {
+      router.push(last as any);
+      return;
+    }
+
+    // 3. Fallback default tab
+    router.push('/(tabs)/index');
+  };
 
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
     (params.goalId as string) || null
@@ -115,6 +140,14 @@ export default function GlobalCameraScreen() {
 
   if (!permission) {
     return <View style={styles.container} />;
+  }
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+        <Text style={{ color: '#FEF9F0', fontFamily: 'Itim' }}>Loading...</Text>
+      </View>
+    );
   }
 
   if (!permission.granted) {
@@ -235,6 +268,7 @@ export default function GlobalCameraScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar hidden={true} />
       {capturedPhoto ? (
         <View style={StyleSheet.absoluteFillObject}>
           <Image
@@ -249,13 +283,13 @@ export default function GlobalCameraScreen() {
                 onPress={() => setCapturedPhoto(null)}
                 disabled={uploading}
               >
-                <Ionicons name="close" size={24} color="#FFF" />
+                <Ionicons name="close" size={24} color="#FEF9F0" />
                 <Text style={styles.retakeText}>Retake</Text>
               </TouchableOpacity>
 
               <Text style={styles.bannerTitle}>Proof Preview</Text>
 
-              <View style={{ width: 60 }} />
+              <View style={styles.headerSpacer} />
             </View>
 
             <View style={styles.reviewBottomBar}>
@@ -279,7 +313,7 @@ export default function GlobalCameraScreen() {
                 <Ionicons
                   name="chevron-up"
                   size={20}
-                  color="#FF6B6B"
+                  color="#824A20"
                 />
               </TouchableOpacity>
 
@@ -294,7 +328,7 @@ export default function GlobalCameraScreen() {
                 <Ionicons
                   name="paper-plane"
                   size={20}
-                  color="#FFF"
+                  color="#FEF9F0"
                   style={{ marginRight: 8 }}
                 />
 
@@ -319,11 +353,12 @@ export default function GlobalCameraScreen() {
 
                   <TouchableOpacity
                     onPress={() => setIsPickerOpen(false)}
+                    style={styles.closeModalBtn}
                   >
                     <Ionicons
-                      name="close-circle"
+                      name="close"
                       size={26}
-                      color="#999"
+                      color="#824A20"
                     />
                   </TouchableOpacity>
                 </View>
@@ -390,9 +425,21 @@ export default function GlobalCameraScreen() {
             pointerEvents="box-none"
           >
             <View style={styles.topBanner}>
-              <Text style={styles.bannerTitle}>
-                Snap Proof Photo 📷
-              </Text>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={handleBack}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={28}
+                  color="#FFF"
+                />
+              </TouchableOpacity>
+
+              <Text style={styles.topLabel}>Snap Your Proof!</Text>
+
+              <View style={styles.topSpacer} />
             </View>
 
             <View style={styles.bottomControls}>
@@ -403,6 +450,7 @@ export default function GlobalCameraScreen() {
                     facing === 'back' ? 'front' : 'back'
                   )
                 }
+                activeOpacity={0.8}
               >
                 <Ionicons
                   name="camera-reverse"
@@ -414,11 +462,12 @@ export default function GlobalCameraScreen() {
               <TouchableOpacity
                 style={styles.shutterBtn}
                 onPress={takePicture}
+                activeOpacity={0.9}
               >
                 <View style={styles.shutterInner} />
               </TouchableOpacity>
 
-              <View style={{ width: 44 }} />
+              <View style={styles.controlSpacer} />
             </View>
           </SafeAreaView>
         </View>
@@ -465,99 +514,173 @@ const styles = StyleSheet.create({
   },
 
   topBanner: {
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    marginHorizontal: 20,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 12,
+    position: 'absolute',
+    top: 72,
+    left: 18,
+    right: 18,
+    zIndex: 3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
 
+  headerSpacer: {
+    width: 60,
+    height: 30,
+  },
+
+  backButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+
+  topLabel: {
+    color: '#FEF9F0',
+    fontFamily: 'Itim',
+    fontWeight: '700',
+    fontSize: 18,
+    letterSpacing: 0.4,
+    flex: 1,
+    textAlign: 'right',
+  },
+
+  topSpacer: {
+    width: 30,
+    height: 30,
+  },
+
   bannerTitle: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+    color: '#FEF9F0',
+    fontFamily: 'Itim',
+    fontWeight: '700',
+    fontSize: 17,
+    textAlign: 'center',
+    flex: 1,
   },
 
   retakeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    minWidth: 60,
   },
 
   retakeText: {
-    color: '#FFF',
+    color: '#FEF9F0',
+    fontFamily: 'Itim',
     fontSize: 14,
     marginLeft: 4,
   },
 
   bottomControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 26,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 30,
+    paddingHorizontal: 36,
   },
 
   flipBtn: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 10,
-    borderRadius: 25,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(254,249,240,0.35)',
   },
 
   shutterBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
     borderWidth: 4,
     borderColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
   },
 
   shutterInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FF6B6B',
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#FEF9F0',
+  },
+
+  controlSpacer: {
+    width: 52,
+    height: 52,
   },
 
   reviewBottomBar: {
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 0,
+    zIndex: 4,
   },
 
   goalSelectorCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FEF9F0',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#D8BDAA',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
   selectorLabel: {
+    fontFamily: 'Itim',
     fontSize: 11,
-    fontWeight: 'bold',
-    color: '#888',
+    fontWeight: '700',
+    color: '#824A20',
     marginBottom: 2,
   },
 
   selectedGoalTitle: {
+    fontFamily: 'Itim',
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#824A20',
   },
 
   submitBtn: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#729AB5',
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 999,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
+    width: '72%',
+    shadowColor: '#1F4D66',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   disabledBtn: {
@@ -565,15 +688,26 @@ const styles = StyleSheet.create({
   },
 
   submitBtnText: {
-    color: '#FFF',
-    fontWeight: 'bold',
+    color: '#FEF9F0',
+    fontFamily: 'Itim',
+    fontWeight: '700',
     fontSize: 16,
   },
 
   loadingText: {
+    fontFamily: 'Itim',
     textAlign: 'center',
-    color: '#666',
+    color: '#824A20',
     paddingVertical: 20,
+  },
+
+  closeModalBtn: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 15,
+    backgroundColor: 'transparent',
   },
 
   modalOverlay: {
@@ -581,13 +715,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
-
+  
   modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#FEF9F0',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '50%',
+    maxHeight: '55%',
+    borderColor: '#D8BDAA',
+    borderWidth: 4.5,
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 0,
   },
 
   modalHeader: {
@@ -598,33 +740,38 @@ const styles = StyleSheet.create({
   },
 
   modalTitle: {
+    fontFamily: 'Itim',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#824A20',
   },
 
   goalOption: {
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: '#E7D3C2',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
 
   selectedGoalOption: {
-    backgroundColor: '#FFF5F5',
-    borderRadius: 8,
+    backgroundColor: '#F7E8DB',
+    borderRadius: 10,
   },
 
   optionTitle: {
+    fontFamily: 'Itim',
     fontSize: 15,
     fontWeight: '600',
+    color: '#824A20',
   },
 
   optionBuddy: {
+    fontFamily: 'Itim',
     fontSize: 12,
-    color: '#666',
+    color: '#824A20',
     marginTop: 2,
   },
 });

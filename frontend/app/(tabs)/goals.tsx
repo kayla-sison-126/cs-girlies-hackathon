@@ -42,6 +42,10 @@ export default function AllGoalsScreen() {
     loadGoals();
   }, []);
 
+  useEffect(() => {
+    setLastTab('/(tabs)/goals');
+  }, []);
+
   async function loadGoals() {
     try {
       setLoading(true);
@@ -264,6 +268,7 @@ export default function AllGoalsScreen() {
                           friendshipId:
                             item.friendship_id,
                           goalId: item.id,
+                          returnTo: '/(tabs)/goals',
                         },
                       } as any);
                     }}
