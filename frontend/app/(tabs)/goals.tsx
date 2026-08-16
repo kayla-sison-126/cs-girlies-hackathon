@@ -4,13 +4,17 @@ import {
   StyleSheet,
   Text,
   View,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 
 import {
   getAllUserGoals,
@@ -34,6 +38,10 @@ type Goal = {
 
 export default function AllGoalsScreen() {
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    Itim: require('../../assets/fonts/Itim.ttf'),
+  });
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,15 +161,16 @@ export default function AllGoalsScreen() {
     }
   }
 
-  if (loading) {
+  if (!fontsLoaded || loading) {
     return (
       <SafeAreaView style={styles.container}>
+        
         <View style={styles.loadingContainer}>
+          
           <ActivityIndicator
             size="large"
-            color="#6C5CE7"
+            color="#824A20"
           />
-
           <Text style={styles.loadingText}>
             Loading your goals...
           </Text>
@@ -170,263 +179,279 @@ export default function AllGoalsScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerBar}>
-        <Text style={styles.title}>
-          All Goals 📋
-        </Text>
+  const dailyGoals = goals.filter((g) => g.completed_by === null);
+  const completedGoals = goals.filter((g) => g.completed_by !== null);
 
-        <Text style={styles.subtitle}>
-          Your master accountability checklist
-        </Text>
+  const sections = [
+    { title: 'Your Daily Goals', data: dailyGoals },
+    { title: 'Completed Goals', data: completedGoals },
+  ];
+
+  return (
+    <View style={styles.container}>
+      <StatusBar hidden={true} />
+
+      {/* Hide default Expo Router tab bar */}
+      <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
+
+      <View style={styles.grassWrapper} pointerEvents="none">
+        <Image
+          source={require('../../assets/images/GrassHill.png')}
+          style={styles.grassHillBackground}
+          resizeMode="stretch"
+        />
       </View>
 
-      {goals.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>
-            🎯
-          </Text>
+      <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
+        {goals.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyEmoji}>🎯</Text>
+            <Text style={styles.emptyTitle}>No goals yet</Text>
+            <Text style={styles.emptyText}>
+              Create a goal with a streak buddy to get started!
+            </Text>
+          </View>
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            onRefresh={loadGoals}
+            refreshing={loading}
+            showsVerticalScrollIndicator={false}
+            renderSectionHeader={({ section: { title, data } }) => {
+              if (data.length === 0) return null;
+              return <Text style={styles.sectionHeader}>{title}</Text>;
+            }}
+            renderItem={({ item }) => {
+              const isDone = item.completed_by !== null;
 
-          <Text style={styles.emptyTitle}>
-            No goals yet
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Create a goal with a streak buddy
-            to get started!
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={goals}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          onRefresh={loadGoals}
-          refreshing={loading}
-          renderItem={({ item }) => {
-            const isDone =
-              item.completed_by !== null;
-
-            return (
-              <View
-                style={[
-                  styles.goalCard,
-                  isDone &&
-                    styles.completedCard,
-                ]}
-              >
-                <View style={styles.goalInfo}>
-                  <Text
-                    style={[
-                      styles.goalTitle,
-                      isDone &&
-                        styles.completedText,
-                    ]}
-                  >
-                    {item.title}
-                  </Text>
-
-                  <Text
-                    style={styles.friendTag}
-                  >
-                    Buddy: {item.friendName}
-                  </Text>
-
-                  {item.is_verifiable &&
-                    !isDone && (
-                      <Text
-                        style={
-                          styles.proofLabel
-                        }
-                      >
-                        📷 Photo proof required
-                      </Text>
-                    )}
-                </View>
-
-                {isDone ? (
-                  <View
-                    style={styles.doneBadge}
-                  >
-                    <Text
-                      style={styles.doneText}
-                    >
-                      ✓ Completed
+              return (
+                <View style={[styles.goalCard, isDone && styles.completedCard]}>
+                  <View style={styles.goalInfo}>
+                    <Text style={styles.goalTitle}>{item.title}</Text>
+                    <Text style={styles.cardSubText}>
+                      Goal Checker: {item.friendName}
+                    </Text>
+                    <Text style={styles.cardSubText}>
+                      Type: {item.is_verifiable ? 'Photo Verification' : 'Check-off'}
                     </Text>
                   </View>
-                ) : item.is_verifiable ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.actionBtn,
-                      styles.photoBtn,
-                    ]}
-                    onPress={() => {
-                      router.push({
-                        pathname:
-                          '/(tabs)/camera',
-                        params: {
-                          friendshipId:
-                            item.friendship_id,
-                          goalId: item.id,
-                          returnTo: '/(tabs)/goals',
-                        },
-                      } as any);
-                    }}
-                  >
-                    <Text
-                      style={styles.btnText}
+
+                  {isDone ? (
+                    <View style={styles.doneBtn}>
+                      <Text style={styles.actionBtnText}>Done!</Text>
+                    </View>
+                  ) : item.is_verifiable ? (
+                    <TouchableOpacity
+                      style={styles.blueActionBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/camera',
+                          params: {
+                            friendshipId: item.friendship_id,
+                            goalId: item.id,
+                            returnTo: '/(tabs)/goals',
+                          },
+                        } as any);
+                      }}
                     >
-                      📷 Proof
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.actionBtn,
-                      styles.checkBtn,
-                    ]}
-                    disabled={
-                      completingGoal ===
-                      item.id
-                    }
-                    onPress={() =>
-                      handleCompleteGoal(
-                        item.id
-                      )
-                    }
-                  >
-                    {completingGoal ===
-                    item.id ? (
-                      <ActivityIndicator
-                        color="#FFF"
-                      />
-                    ) : (
-                      <Text
-                        style={styles.btnText}
-                      >
-                        ✅ Complete
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          }}
-        />
-      )}
-    </SafeAreaView>
+                      <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.actionBtnText}>Take Proof</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.blueActionBtn}
+                      activeOpacity={0.8}
+                      disabled={completingGoal === item.id}
+                      onPress={() => handleCompleteGoal(item.id)}
+                    >
+                      {completingGoal === item.id ? (
+                        <ActivityIndicator color="#FFF" size="small" />
+                      ) : (
+                        <Text style={styles.actionBtnText}>Mark as Complete</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            }}
+          />
+        )}
+
+        {/* Elevated Arched Bottom Navigation Bar */}
+        <View style={styles.bottomNavContainer}>
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.sideNavButton]}
+            onPress={() => router.push('/(tabs)' as any)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="people-outline" size={36} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.centerNavButton]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="checkmark-done-outline" size={38} color="#F8DC81" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.sideNavButton]}
+            onPress={() => router.push('/(tabs)/camera' as any)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="camera-outline" size={36} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#D2E7F5',
   },
 
-  headerBar: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+  grassWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: 180,
+    zIndex: 1,
   },
 
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+  grassHillBackground: {
+    width: '100%',
+    height: '100%',
   },
 
   listContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingTop: 16,
+    paddingBottom: 180,
+  },
+
+  sectionHeader: {
+    fontFamily: 'Itim',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#824A20',
+    marginTop: 12,
+    marginBottom: 12,
   },
 
   goalCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: '#FEF9F0',
+    borderRadius: 28,
+    borderWidth: 3.5,
+    borderColor: '#C7967D',
+    padding: 18,
+    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    elevation: 1,
+    shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 3,
   },
 
   completedCard: {
-    backgroundColor: '#F0F4F8',
-    opacity: 0.8,
+    backgroundColor: '#E4DDD3',
+    borderColor: '#C7967D',
+    opacity: 0.9,
   },
 
   goalInfo: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 12,
   },
 
   goalTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontFamily: 'Itim',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#824A20',
+    marginBottom: 4,
   },
 
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: '#888',
-  },
-
-  friendTag: {
+  cardSubText: {
+    fontFamily: 'Itim',
     fontSize: 12,
-    color: '#4A90E2',
-    marginTop: 4,
-    fontWeight: '600',
+    color: '#824A20',
+    marginTop: 1,
   },
 
-  proofLabel: {
-    fontSize: 11,
-    color: '#FF6B6B',
-    marginTop: 5,
-    fontWeight: '600',
-  },
-
-  actionBtn: {
-    paddingVertical: 8,
+  blueActionBtn: {
+    backgroundColor: '#729AB5',
+    borderRadius: 20,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 8,
-    minWidth: 90,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 105,
+    justifyContent: 'center',
+  },
+
+  doneBtn: {
+    backgroundColor: '#A8B8C2',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    justifyContent: 'center',
     alignItems: 'center',
   },
 
-  photoBtn: {
-    backgroundColor: '#FF6B6B',
-  },
-
-  checkBtn: {
-    backgroundColor: '#4CAF50',
-  },
-
-  btnText: {
-    color: '#FFF',
-    fontWeight: 'bold',
+  actionBtnText: {
+    fontFamily: 'Itim',
     fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 
-  doneBadge: {
-    backgroundColor: '#E8F5E9',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+  bottomNavContainer: {
+    position: 'absolute',
+    bottom: 48,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    zIndex: 20,
   },
 
-  doneText: {
-    color: '#2E7D32',
-    fontWeight: 'bold',
-    fontSize: 12,
+  navCircleButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#FEF9F0',
+    backgroundColor: '#C7967D',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+
+  sideNavButton: {
+    transform: [{ translateY: 0 }],
+  },
+
+  centerNavButton: {
+    transform: [{ translateY: -18 }],
   },
 
   loadingContainer: {
@@ -436,9 +461,10 @@ const styles = StyleSheet.create({
   },
 
   loadingText: {
+    fontFamily: 'Itim',
     marginTop: 12,
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#824A20',
   },
 
   emptyContainer: {
@@ -454,15 +480,17 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    fontSize: 20,
+    fontFamily: 'Itim',
+    fontSize: 22,
     fontWeight: '700',
-    color: '#2D3436',
+    color: '#824A20',
     marginBottom: 8,
   },
 
   emptyText: {
+    fontFamily: 'Itim',
     fontSize: 14,
-    color: '#636E72',
+    color: '#824A20',
     textAlign: 'center',
     lineHeight: 20,
   },

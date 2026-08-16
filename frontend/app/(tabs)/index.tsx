@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -23,6 +24,8 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
 } from '../../lib/friendRequests';
+
+const goatHeadImg = require('../../assets/images/home/emote-bashful.png');
 
 type FriendshipCard = {
   id: string;
@@ -66,6 +69,7 @@ export default function StreakBuddiesScreen() {
       loadFriendships();
     }, [])
   );
+
   useEffect(() => {
     setLastTab('/(tabs)/index');
   }, []);
@@ -111,7 +115,7 @@ export default function StreakBuddiesScreen() {
 
           const { data: profile } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, username')
             .eq('id', friendId)
             .maybeSingle();
 
@@ -136,8 +140,7 @@ export default function StreakBuddiesScreen() {
 
           return {
             id: friendship.id,
-            friendName:
-              profile?.username || 'Friend',
+            friendName: profile?.username || 'Friend',
             petName: pet?.name || 'Buddy',
             petEmoji: '🐾',
             streakDays: stats?.streak_days || 0,
@@ -216,17 +219,14 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not send request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
     }
   }
 
-  async function handleAcceptRequest(
-    requestId: string
-  ) {
+  async function handleAcceptRequest(requestId: string) {
     try {
       setRequestLoading(true);
 
@@ -261,17 +261,14 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not accept request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
     }
   }
 
-  async function handleDeclineRequest(
-    requestId: string
-  ) {
+  async function handleDeclineRequest(requestId: string) {
     try {
       setRequestLoading(true);
 
@@ -290,8 +287,7 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not decline request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
@@ -451,108 +447,83 @@ export default function StreakBuddiesScreen() {
 
       <Modal
         visible={modalVisible}
-        animationType="slide"
+        animationType="fade"
         transparent
-        onRequestClose={() =>
-          setModalVisible(false)
-        }
+        onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>
-                  Add a Buddy 🤝
-                </Text>
+          <View style={styles.modalCard}>
 
-                <Text style={styles.modalSubtitle}>
-                  Connect with someone and start
-                  your streak together.
-                </Text>
-              </View>
+            {/* Header */}
+
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Add Friend
+              </Text>
 
               <TouchableOpacity
-                onPress={() =>
-                  setModalVisible(false)
-                }
+                onPress={() => setModalVisible(false)}
                 style={styles.closeButton}
               >
                 <Ionicons
                   name="close"
                   size={24}
-                  color="#636E72"
+                  color="#C7967D"
                 />
               </TouchableOpacity>
             </View>
 
-            {/* MY CODE */}
+            {/* Section 1: Share Code */}
 
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>
-                Your Pairing Code
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Share your friend code:
               </Text>
 
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText}>
-                  {myPairingCode || 'Loading...'}
-                </Text>
-              </View>
-
-              <Text style={styles.helperText}>
-                Share this code with a friend so
-                they can send you a request.
+              <Text style={styles.shareCodeText}>
+                {myPairingCode || 'Loading...'}
               </Text>
             </View>
 
-            {/* SEND REQUEST */}
+            {/* Section 2: Enter Code */}
 
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>
-                Enter Friend's Code
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Enter a friend code:
               </Text>
 
               <TextInput
-                style={styles.codeInput}
+                style={styles.pillInput}
                 value={friendCode}
                 onChangeText={setFriendCode}
-                placeholder="Enter pairing code"
-                placeholderTextColor="#999"
                 autoCapitalize="characters"
                 autoCorrect={false}
               />
 
               <TouchableOpacity
-                style={styles.sendButton}
+                style={styles.blueButton}
                 onPress={handleSendRequest}
                 disabled={requestLoading}
+                activeOpacity={0.8}
               >
                 {requestLoading ? (
                   <ActivityIndicator
                     color="#FFFFFF"
+                    size="small"
                   />
                 ) : (
-                  <>
-                    <Ionicons
-                      name="paper-plane"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-
-                    <Text
-                      style={styles.sendButtonText}
-                    >
-                      Send Request
-                    </Text>
-                  </>
+                  <Text style={styles.buttonText}>
+                    Send Request
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* RECEIVED REQUESTS */}
+            {/* Section 3: Received Requests */}
 
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>
-                Friend Requests
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Received Friend Requests
               </Text>
 
               {requests.length === 0 ? (
@@ -563,75 +534,45 @@ export default function StreakBuddiesScreen() {
                 requests.map((request) => (
                   <View
                     key={request.id}
-                    style={styles.requestCard}
+                    style={styles.innerCard}
                   >
-                    <View
-                      style={styles.requestInfo}
-                    >
-                      <Text
-                        style={
-                          styles.requestName
-                        }
-                      >
-                        {request.sender?.username || 'Someone'}
+                    <View style={styles.innerCardTop}>
+                      <Text style={styles.requestText}>
+                        {request.sender?.username ||
+                          'Someone'}{' '}
+                        [{request.sender?.pairing_code || ''}]
+                        {'\n'}
+                        wants to be friends!
                       </Text>
 
-                      <Text
-                        style={
-                          styles.requestCode
-                        }
-                      >
-                        {request.sender
-                          ?.pairing_code ||
-                          ''}
-                      </Text>
+                      <Image
+                        source={goatHeadImg}
+                        style={styles.goatHeadImage}
+                        resizeMode="contain"
+                      />
                     </View>
 
-                    <View
-                      style={
-                        styles.requestActions
-                      }
-                    >
+                    <View style={styles.actionRow}>
                       <TouchableOpacity
-                        style={
-                          styles.acceptButton
-                        }
+                        style={styles.blueButtonSmall}
                         onPress={() =>
-                          handleAcceptRequest(
-                            request.id
-                          )
+                          handleAcceptRequest(request.id)
                         }
-                        disabled={
-                          requestLoading
-                        }
+                        disabled={requestLoading}
                       >
-                        <Text
-                          style={
-                            styles.acceptButtonText
-                          }
-                        >
+                        <Text style={styles.buttonText}>
                           Accept
                         </Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={
-                          styles.declineButton
-                        }
+                        style={styles.redButtonSmall}
                         onPress={() =>
-                          handleDeclineRequest(
-                            request.id
-                          )
+                          handleDeclineRequest(request.id)
                         }
-                        disabled={
-                          requestLoading
-                        }
+                        disabled={requestLoading}
                       >
-                        <Text
-                          style={
-                            styles.declineButtonText
-                          }
-                        >
+                        <Text style={styles.buttonText}>
                           Decline
                         </Text>
                       </TouchableOpacity>
@@ -837,165 +778,170 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // Modal Backdrop
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
 
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  // Main Pop-up Container
+
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#FDF5E6',
+    borderRadius: 28,
+    borderWidth: 4.5,
+    borderColor: '#C7967D',
     padding: 20,
-    maxHeight: '90%',
   },
+
+  // Header
 
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+    alignItems: 'center',
+    marginBottom: 16,
   },
 
   modalTitle: {
-    fontSize: 24,
+    fontFamily: 'Itim',
+    fontSize: 22,
     fontWeight: '700',
-    color: '#2D3436',
-  },
-
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#636E72',
-    marginTop: 4,
-    maxWidth: 280,
+    color: '#824A20',
   },
 
   closeButton: {
     padding: 4,
   },
 
-  modalSection: {
-    marginBottom: 22,
-  },
+  // Outer Boxes
 
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#2D3436',
-    marginBottom: 8,
-  },
-
-  codeBox: {
-    backgroundColor: '#EDEAFF',
-    borderRadius: 12,
-    paddingVertical: 16,
+  sectionBox: {
+    borderWidth: 3,
+    borderColor: '#C7967D',
+    borderRadius: 20,
+    backgroundColor: '#FFFDF6',
+    padding: 16,
+    marginBottom: 14,
     alignItems: 'center',
   },
 
-  codeText: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: 3,
-    color: '#6C5CE7',
-  },
-
-  helperText: {
-    fontSize: 12,
-    color: '#636E72',
-    marginTop: 6,
-  },
-
-  codeInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#DCDDE1',
-    borderRadius: 10,
-    paddingHorizontal: 14,
+  sectionLabel: {
+    fontFamily: 'Itim',
     fontSize: 16,
-    color: '#2D3436',
-    backgroundColor: '#FAFAFA',
+    fontWeight: '700',
+    color: '#824A20',
+    alignSelf: 'flex-start',
     marginBottom: 10,
   },
 
-  sendButton: {
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: '#6C5CE7',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  shareCodeText: {
+    fontFamily: 'Itim',
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: 4,
+    color: '#824A20',
+    marginVertical: 4,
   },
 
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+  // Input
+
+  pillInput: {
+    width: '100%',
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: '#C7967D',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    textAlign: 'center',
+    fontFamily: 'Itim',
+    fontSize: 18,
+    color: '#824A20',
+    marginBottom: 12,
+  },
+
+  // Buttons
+
+  blueButton: {
+    backgroundColor: '#729AB5',
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+
+  blueButtonSmall: {
+    flex: 1,
+    backgroundColor: '#729AB5',
+    borderRadius: 16,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+
+  redButtonSmall: {
+    flex: 1,
+    backgroundColor: '#C76A6A',
+    borderRadius: 16,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+
+  buttonText: {
+    fontFamily: 'Itim',
+    fontSize: 14,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Friend Request Card
+
+  innerCard: {
+    width: '100%',
+    borderWidth: 3,
+    borderColor: '#C7967D',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 8,
+  },
+
+  innerCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+
+  requestText: {
+    flex: 1,
+    fontFamily: 'Itim',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#824A20',
+    lineHeight: 18,
+    marginRight: 8,
+  },
+
+  goatHeadImage: {
+    width: 44,
+    height: 44,
+  },
+
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
 
   noRequestsText: {
-    fontSize: 13,
-    color: '#636E72',
-    backgroundColor: '#F8F9FA',
-    padding: 14,
-    borderRadius: 10,
-  },
-
-  requestCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-
-  requestInfo: {
-    marginBottom: 10,
-  },
-
-  requestName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2D3436',
-  },
-
-  requestCode: {
-    fontSize: 11,
-    color: '#636E72',
-    marginTop: 2,
-  },
-
-  requestActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  acceptButton: {
-    flex: 1,
-    backgroundColor: '#00B894',
-    paddingVertical: 9,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-
-  acceptButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  declineButton: {
-    flex: 1,
-    backgroundColor: '#FFE8E8',
-    paddingVertical: 9,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-
-  declineButtonText: {
-    color: '#FF6B6B',
-    fontWeight: '700',
-    fontSize: 13,
+    fontFamily: 'Itim',
+    fontSize: 14,
+    color: '#824A20',
+    marginTop: 4,
   },
 });
-
