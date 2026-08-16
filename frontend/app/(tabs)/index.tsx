@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -31,9 +31,10 @@ export default function StreakBuddiesScreen() {
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
-  useCallback(() => {
-    loadFriendships();
-  }, []);
+    useCallback(() => {
+      loadFriendships();
+    }, [])
+  );
 
   useEffect(() => {
     setLastTab('/(tabs)/index');
