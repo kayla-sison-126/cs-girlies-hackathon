@@ -366,7 +366,7 @@ export default function StreakBuddiesScreen() {
                   source={goatHeads[item.goatVariant] || goatHeads[1]}
                   style={[
                     styles.goatAvatar,
-                    !isCompleted && styles.silhouetteAvatar,
+                    // !isCompleted && styles.silhouetteAvatar,
                   ]}
                   resizeMode="contain"
                 />
@@ -638,10 +638,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
-  silhouetteAvatar: {
-    tintColor: '#5C3820',
-    opacity: 0.3,
-  },
+  // silhouetteAvatar: {
+  //   tintColor: '#5C3820',
+  //   opacity: 0.3,
+  // },
 
   petCardInfo: {
     flex: 1,
