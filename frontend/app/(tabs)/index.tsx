@@ -12,9 +12,11 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, Tabs } from 'expo-router';
 import { setLastTab } from '../../lib/lastTab';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../../lib/supabase';
 
 import {
@@ -25,17 +27,23 @@ import {
   declineFriendRequest,
 } from '../../lib/friendRequests';
 
-const goatHeadImg = require('../../assets/images/home/emote-bashful.png');
+// Assets
+const titleImage = require('../../assets/images/GoatTogetherTitle.png');
+
+const goatHeads = [
+  require('../../assets/images/home/goat-1.png'),
+  require('../../assets/images/home/goat-2.png'),
+];
 
 type FriendshipCard = {
   id: string;
   friendName: string;
   petName: string;
-  petEmoji: string;
+  goatVariant: number;
   streakDays: number;
   hearts: number;
-  maxHearts: number;
   coins: number;
+  hasCompletedGoalToday: boolean;
 };
 
 type FriendRequest = {
@@ -54,10 +62,14 @@ type FriendRequest = {
 export default function StreakBuddiesScreen() {
   const router = useRouter();
 
+  const [fontsLoaded] = useFonts({
+    Itim: require('../../assets/fonts/Itim.ttf'),
+  });
+
   const [friendships, setFriendships] = useState<FriendshipCard[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Add Buddy modal
+  // Add Buddy modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [myPairingCode, setMyPairingCode] = useState('');
   const [friendCode, setFriendCode] = useState('');
@@ -102,8 +114,10 @@ export default function StreakBuddiesScreen() {
         return;
       }
 
+      const todayStr = new Date().toISOString().split('T')[0];
+
       const cards = await Promise.all(
-        friendshipData.map(async (friendship) => {
+        friendshipData.map(async (friendship, index) => {
           const friendId =
             friendship.user_a_id === user.id
               ? friendship.user_b_id
@@ -113,48 +127,64 @@ export default function StreakBuddiesScreen() {
             return null;
           }
 
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, username')
-            .eq('id', friendId)
-            .maybeSingle();
-
-          const { data: stats } = await supabase
-            .from('user_stats')
-            .select('*')
-            .eq('user_id', friendId)
-            .maybeSingle();
-
-          const { data: pet } = await supabase
-            .from('pets')
-            .select('*')
-            .eq('friendship_id', friendship.id)
-            .maybeSingle();
+          const [
+            { data: profile },
+            { data: myStats },
+            { data: friendStats },
+            { data: pet },
+          ] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('id, username')
+              .eq('id', friendId)
+              .maybeSingle(),
+            supabase
+              .from('user_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('user_stats')
+              .select('*')
+              .eq('user_id', friendId)
+              .maybeSingle(),
+            supabase
+              .from('pets')
+              .select('*')
+              .eq('friendship_id', friendship.id)
+              .maybeSingle(),
+          ]);
 
           const health = pet?.health ?? 100;
+          const hearts = Math.max(0, Math.min(5, Math.ceil(health / 20)));
+          const goatVariant = (pet?.avatar_variant ?? index) % 3;
 
-          const hearts = Math.max(
-            0,
-            Math.min(5, Math.ceil(health / 20))
+          const currentStreak = Math.max(
+            myStats?.streak_days || 0,
+            friendStats?.streak_days || 0
           );
+
+          // Requires at least 1 day streak AND recent activity today
+          const myActiveToday = myStats?.last_active_date === todayStr;
+          const friendActiveToday = friendStats?.last_active_date === todayStr;
+          const hasCompletedGoalToday =
+            currentStreak > 0 && (myActiveToday || friendActiveToday);
 
           return {
             id: friendship.id,
             friendName: profile?.username || 'Friend',
-            petName: pet?.name || 'Buddy',
-            petEmoji: '🐾',
-            streakDays: stats?.streak_days || 0,
+            petName: pet?.name || 'Buttercup',
+            goatVariant,
+            streakDays: currentStreak,
             hearts,
-            maxHearts: 5,
-            coins: stats?.points || 0,
+            coins: friendStats?.points || 0,
+            hasCompletedGoalToday,
           };
         })
       );
 
       setFriendships(
-        cards.filter(
-          (card): card is FriendshipCard => card !== null
-        )
+        cards.filter((card): card is FriendshipCard => card !== null)
       );
     } catch (error) {
       console.error('Failed to load friendships:', error);
@@ -177,15 +207,8 @@ export default function StreakBuddiesScreen() {
       setRequests(receivedRequests);
       setModalVisible(true);
     } catch (error) {
-      console.error(
-        'Failed to load buddy information:',
-        error
-      );
-
-      Alert.alert(
-        'Error',
-        'Could not load your buddy information.'
-      );
+      console.error('Failed to load buddy information:', error);
+      Alert.alert('Error', 'Could not load your buddy information.');
     } finally {
       setRequestLoading(false);
     }
@@ -193,34 +216,18 @@ export default function StreakBuddiesScreen() {
 
   async function handleSendRequest() {
     if (!friendCode.trim()) {
-      Alert.alert(
-        'Missing Code',
-        'Please enter your friend’s pairing code.'
-      );
+      Alert.alert('Missing Code', 'Please enter your friend’s pairing code.');
       return;
     }
 
     try {
       setRequestLoading(true);
-
       await sendFriendRequest(friendCode);
-
       setFriendCode('');
-
-      Alert.alert(
-        'Request Sent! 🎉',
-        'Your friend request has been sent.'
-      );
+      Alert.alert('Request Sent! 🎉', 'Your friend request has been sent.');
     } catch (error: any) {
-      console.error(
-        'Failed to send friend request:',
-        error
-      );
-
-      Alert.alert(
-        'Could not send request',
-        error?.message || 'Something went wrong.'
-      );
+      console.error('Failed to send friend request:', error);
+      Alert.alert('Could not send request', error?.message || 'Something went wrong.');
     } finally {
       setRequestLoading(false);
     }
@@ -229,40 +236,23 @@ export default function StreakBuddiesScreen() {
   async function handleAcceptRequest(requestId: string) {
     try {
       setRequestLoading(true);
-
-      const friendship =
-        await acceptFriendRequest(requestId);
+      const friendship = await acceptFriendRequest(requestId);
 
       setRequests((currentRequests) =>
-        currentRequests.filter(
-          (request) => request.id !== requestId
-        )
+        currentRequests.filter((request) => request.id !== requestId)
       );
 
       setModalVisible(false);
-
       await loadFriendships();
 
-      Alert.alert(
-        'Connected! 🎉',
-        'You are now streak buddies!'
-      );
+      Alert.alert('Connected! 🎉', 'You are now streak buddies!');
 
       if (friendship?.id) {
-        router.push(
-          `/friendship/${friendship.id}` as any
-        );
+        router.push(`/friendship/${friendship.id}` as any);
       }
     } catch (error: any) {
-      console.error(
-        'Failed to accept friend request:',
-        error
-      );
-
-      Alert.alert(
-        'Could not accept request',
-        error?.message || 'Something went wrong.'
-      );
+      console.error('Failed to accept friend request:', error);
+      Alert.alert('Could not accept request', error?.message || 'Something went wrong.');
     } finally {
       setRequestLoading(false);
     }
@@ -271,180 +261,180 @@ export default function StreakBuddiesScreen() {
   async function handleDeclineRequest(requestId: string) {
     try {
       setRequestLoading(true);
-
       await declineFriendRequest(requestId);
-
       setRequests((currentRequests) =>
-        currentRequests.filter(
-          (request) => request.id !== requestId
-        )
+        currentRequests.filter((request) => request.id !== requestId)
       );
     } catch (error: any) {
-      console.error(
-        'Failed to decline friend request:',
-        error
-      );
-
-      Alert.alert(
-        'Could not decline request',
-        error?.message || 'Something went wrong.'
-      );
+      console.error('Failed to decline friend request:', error);
+      Alert.alert('Could not decline request', error?.message || 'Something went wrong.');
     } finally {
       setRequestLoading(false);
     }
   }
 
-  if (loading) {
+  const renderHearts = (heartCount: number) => {
+    const hearts = [];
+    for (let i = 1; i <= 5; i++) {
+      const isFilled = i <= heartCount;
+      hearts.push(
+        <View key={i} style={styles.heartContainer}>
+          <Ionicons name="heart" size={20} color="#824A20" style={styles.heartBorder} />
+          <Ionicons
+            name="heart"
+            size={16}
+            color={isFilled ? '#E57373' : '#A3A099'}
+            style={styles.heartInner}
+          />
+        </View>
+      );
+    }
+    return hearts;
+  };
+
+  if (!fontsLoaded || loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size="large"
-            color="#6C5CE7"
-          />
-
-          <Text style={styles.loadingText}>
-            Loading your streak buddies...
-          </Text>
+          <ActivityIndicator size="large" color="#824A20" />
+          <Text style={styles.loadingText}>Loading your streak buddies...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerBar}>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>
-            Streak Buddies 🐾
-          </Text>
+    <View style={styles.container}>
+      <StatusBar hidden={true} />
+      <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
 
-          <Text style={styles.subtitle}>
-            Keep your pets alive together!
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={async () => {
-            await supabase.auth.signOut();
-            router.replace('/auth/login');
-          }}
-        >
-          <Text style={styles.logoutButtonText}>
-            Log Out
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.grassWrapper} pointerEvents="none">
+        <Image
+          source={require('../../assets/images/GrassHill.png')}
+          style={styles.grassHillBackground}
+          resizeMode="stretch"
+        />
       </View>
 
-      {/* ADD BUDDY BUTTON */}
+      <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
+        {/* Top Header */}
+        <View style={styles.topHeader}>
+          <View style={styles.headerLeftPlaceholder} />
 
-      <TouchableOpacity
-        style={styles.addBuddyTopButton}
-        onPress={openBuddyModal}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name="person-add"
-          size={20}
-          color="#FFFFFF"
-        />
-
-        <Text style={styles.addBuddyTopButtonText}>
-          Add Buddy
-        </Text>
-      </TouchableOpacity>
-
-      {friendships.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>
-            🐾
-          </Text>
-
-          <Text style={styles.emptyTitle}>
-            No streak buddies yet
-          </Text>
-
-          <Text style={styles.emptyText}>
-            Pair up with a friend to start taking
-            care of a pet together!
-          </Text>
+          <View style={styles.headerTitleGroup}>
+            <Image
+              source={titleImage}
+              style={styles.titleImage}
+              resizeMode="contain"
+            />
+          </View>
 
           <TouchableOpacity
-            style={styles.addBuddyButton}
-            onPress={openBuddyModal}
+            style={styles.logoutBtn}
             activeOpacity={0.8}
+            onPress={async () => {
+              await supabase.auth.signOut();
+              router.replace('/auth/login');
+            }}
           >
-            <Ionicons
-              name="person-add"
-              size={20}
-              color="#FFFFFF"
-            />
-
-            <Text style={styles.addBuddyButtonText}>
-              Add a Buddy
-            </Text>
+            <Ionicons name="log-out-outline" size={18} color="#824A20" />
+            <Text style={styles.logoutBtnText}>Log Out</Text>
           </TouchableOpacity>
         </View>
-      ) : (
+
+        {/* Scrollable List */}
         <FlatList
           data={friendships}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           onRefresh={loadFriendships}
           refreshing={loading}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.7}
-              onPress={() =>
-                router.push(
-                  `/friendship/${item.id}` as any
-                )
-              }
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.friendName}>
-                  With {item.friendName}
-                </Text>
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Text style={styles.sectionHeader}>Your Pets</Text>
+          }
+          renderItem={({ item }) => {
+            const isCompleted = item.hasCompletedGoalToday;
 
-                <View style={styles.badge}>
-                  <Text style={styles.streakText}>
-                    🔥 {item.streakDays} Days
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.petSection}>
-                <Text style={styles.petEmoji}>
-                  {item.petEmoji}
-                </Text>
-
-                <View style={styles.petDetails}>
-                  <Text style={styles.petName}>
-                    {item.petName}
-                  </Text>
-
-                  <Text style={styles.subText}>
-                    ❤️ {item.hearts}/{item.maxHearts}
-                    {'  •  '}
-                    💰 {item.coins} Coins
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={22}
-                  color="#BBB"
+            return (
+              <TouchableOpacity
+                style={styles.petCard}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/friendship/${item.id}` as any)}
+              >
+                <Image
+                  source={goatHeads[item.goatVariant] || goatHeads[1]}
+                  style={[
+                    styles.goatAvatar,
+                    !isCompleted && styles.silhouetteAvatar,
+                  ]}
+                  resizeMode="contain"
                 />
-              </View>
+
+                <View style={styles.petCardInfo}>
+                  <Text style={styles.withText}>With {item.friendName}</Text>
+                  <Text style={styles.petNameText}>{item.petName}</Text>
+
+                  <View style={styles.heartsRow}>{renderHearts(item.hearts)}</View>
+
+                  <View style={styles.streakRow}>
+                    <Ionicons
+                      name={
+                        isCompleted
+                          ? 'checkmark-circle'
+                          : 'checkmark-circle-outline'
+                      }
+                      size={16}
+                      color={isCompleted ? '#4CAF50' : '#824A20'}
+                    />
+                    <Text style={styles.streakText}>{item.streakDays}-Day Streak</Text>
+                  </View>
+                </View>
+
+                <Ionicons name="chevron-forward" size={24} color="#C7967D" />
+              </TouchableOpacity>
+            );
+          }}
+          ListFooterComponent={
+            <TouchableOpacity
+              style={styles.addFriendCardBtn}
+              onPress={openBuddyModal}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={36} color="#C7967D" />
+              <Text style={styles.addFriendCardText}>Add Friend</Text>
             </TouchableOpacity>
-          )}
+          }
         />
-      )}
 
-      {/* ADD BUDDY MODAL */}
+        {/* Floating Nav */}
+        <View style={styles.bottomNavContainer}>
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.sideNavButton]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="people-outline" size={36} color="#F8DC81" />
+          </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.centerNavButton]}
+            onPress={() => router.push('/(tabs)/goals' as any)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="checkmark-done-outline" size={38} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.navCircleButton, styles.sideNavButton]}
+            onPress={() => router.push('/(tabs)/camera' as any)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="camera-outline" size={36} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* Add Buddy Modal */}
       <Modal
         visible={modalVisible}
         animationType="fade"
@@ -453,45 +443,25 @@ export default function StreakBuddiesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-
-            {/* Header */}
-
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                Add Friend
-              </Text>
-
+              <Text style={styles.modalTitle}>Add Friend</Text>
               <TouchableOpacity
                 onPress={() => setModalVisible(false)}
                 style={styles.closeButton}
               >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color="#C7967D"
-                />
+                <Ionicons name="close" size={24} color="#C7967D" />
               </TouchableOpacity>
             </View>
 
-            {/* Section 1: Share Code */}
-
             <View style={styles.sectionBox}>
-              <Text style={styles.sectionLabel}>
-                Share your friend code:
-              </Text>
-
+              <Text style={styles.sectionLabel}>Share your friend code:</Text>
               <Text style={styles.shareCodeText}>
                 {myPairingCode || 'Loading...'}
               </Text>
             </View>
 
-            {/* Section 2: Enter Code */}
-
             <View style={styles.sectionBox}>
-              <Text style={styles.sectionLabel}>
-                Enter a friend code:
-              </Text>
-
+              <Text style={styles.sectionLabel}>Enter a friend code:</Text>
               <TextInput
                 style={styles.pillInput}
                 value={friendCode}
@@ -507,47 +477,31 @@ export default function StreakBuddiesScreen() {
                 activeOpacity={0.8}
               >
                 {requestLoading ? (
-                  <ActivityIndicator
-                    color="#FFFFFF"
-                    size="small"
-                  />
+                  <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.buttonText}>
-                    Send Request
-                  </Text>
+                  <Text style={styles.buttonText}>Send Request</Text>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* Section 3: Received Requests */}
-
             <View style={styles.sectionBox}>
-              <Text style={styles.sectionLabel}>
-                Received Friend Requests
-              </Text>
+              <Text style={styles.sectionLabel}>Received Friend Requests</Text>
 
               {requests.length === 0 ? (
-                <Text style={styles.noRequestsText}>
-                  No pending requests.
-                </Text>
+                <Text style={styles.noRequestsText}>No pending requests.</Text>
               ) : (
                 requests.map((request) => (
-                  <View
-                    key={request.id}
-                    style={styles.innerCard}
-                  >
+                  <View key={request.id} style={styles.innerCard}>
                     <View style={styles.innerCardTop}>
                       <Text style={styles.requestText}>
-                        {request.sender?.username ||
-                          'Someone'}{' '}
+                        {request.sender?.username || 'Someone'}{' '}
                         [{request.sender?.pairing_code || ''}]
-                        {'\n'}
-                        wants to be friends!
+                        {'\n'}wants to be friends!
                       </Text>
 
                       <Image
-                        source={goatHeadImg}
-                        style={styles.goatHeadImage}
+                        source={goatHeads[1]}
+                        style={styles.modalGoatHead}
                         resizeMode="contain"
                       />
                     </View>
@@ -555,26 +509,18 @@ export default function StreakBuddiesScreen() {
                     <View style={styles.actionRow}>
                       <TouchableOpacity
                         style={styles.blueButtonSmall}
-                        onPress={() =>
-                          handleAcceptRequest(request.id)
-                        }
+                        onPress={() => handleAcceptRequest(request.id)}
                         disabled={requestLoading}
                       >
-                        <Text style={styles.buttonText}>
-                          Accept
-                        </Text>
+                        <Text style={styles.buttonText}>Accept</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
                         style={styles.redButtonSmall}
-                        onPress={() =>
-                          handleDeclineRequest(request.id)
-                        }
+                        onPress={() => handleDeclineRequest(request.id)}
                         disabled={requestLoading}
                       >
-                        <Text style={styles.buttonText}>
-                          Decline
-                        </Text>
+                        <Text style={styles.buttonText}>Decline</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -584,201 +530,243 @@ export default function StreakBuddiesScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#D2E7F5',
   },
 
-  headerBar: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+  grassWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: 180,
+    zIndex: 1,
   },
 
-  headerContent: {
+  grassHillBackground: {
+    width: '100%',
+    height: '100%',
+  },
+
+  topHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+
+  headerLeftPlaceholder: {
+    width: 84,
+  },
+
+  headerTitleGroup: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+  titleImage: {
+    width: 170,
+    height: 55,
   },
 
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-
-  addBuddyTopButton: {
+  logoutBtn: {
+    width: 84,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6C5CE7',
-    marginHorizontal: 20,
-    marginBottom: 14,
-    paddingVertical: 11,
-    borderRadius: 10,
-    gap: 8,
+    backgroundColor: '#FEF9F0',
+    borderWidth: 2,
+    borderColor: '#C7967D',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
   },
 
-  addBuddyTopButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+  logoutBtnText: {
+    fontFamily: 'Itim',
+    fontSize: 11,
     fontWeight: '700',
+    color: '#824A20',
   },
 
   listContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingTop: 8,
+    paddingBottom: 180,
   },
 
-  card: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-  },
-
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  friendName: {
-    fontSize: 17,
+  sectionHeader: {
+    fontFamily: 'Itim',
+    fontSize: 22,
     fontWeight: '700',
-    color: '#2C3E50',
+    color: '#824A20',
+    marginBottom: 10,
+    marginTop: 4,
   },
 
-  badge: {
-    backgroundColor: '#FFEBEB',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  petCard: {
+    backgroundColor: '#FEF9F0',
+    borderRadius: 30,
+    borderWidth: 3.5,
+    borderColor: '#C7967D',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+
+  goatAvatar: {
+    width: 75,
+    height: 75,
+    marginRight: 12,
+  },
+
+  silhouetteAvatar: {
+    tintColor: '#5C3820',
+    opacity: 0.3,
+  },
+
+  petCardInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+
+  withText: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#824A20',
+  },
+
+  petNameText: {
+    fontFamily: 'Itim',
+    fontSize: 12,
+    color: '#824A20',
+    marginBottom: 4,
+  },
+
+  heartsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 4,
+  },
+
+  heartContainer: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  heartBorder: {
+    position: 'absolute',
+  },
+
+  heartInner: {
+    position: 'absolute',
+  },
+
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 
   streakText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FF6B6B',
+    fontFamily: 'Itim',
+    fontSize: 11,
+    color: '#824A20',
   },
 
-  petSection: {
-    flexDirection: 'row',
+  addFriendCardBtn: {
+    backgroundColor: '#FEF9F0',
+    borderWidth: 3.5,
+    borderColor: '#C7967D',
+    borderRadius: 30,
+    paddingVertical: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 3,
   },
 
-  petEmoji: {
-    fontSize: 38,
-  },
-
-  petDetails: {
-    flex: 1,
-    marginLeft: 14,
-  },
-
-  petName: {
+  addFriendCardText: {
+    fontFamily: 'Itim',
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#824A20',
   },
 
-  subText: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 3,
+  bottomNavContainer: {
+    position: 'absolute',
+    bottom: 48,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    zIndex: 20,
+  },
+
+  navCircleButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#FEF9F0',
+    backgroundColor: '#C7967D',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8a6b59',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+
+  sideNavButton: {
+    transform: [{ translateY: 0 }],
+  },
+
+  centerNavButton: {
+    transform: [{ translateY: -18 }],
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 30,
   },
 
   loadingText: {
+    fontFamily: 'Itim',
     marginTop: 12,
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#824A20',
   },
-
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-
-  emptyEmoji: {
-    fontSize: 60,
-    marginBottom: 16,
-  },
-
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#2D3436',
-    marginBottom: 8,
-  },
-
-  emptyText: {
-    fontSize: 14,
-    color: '#636E72',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-
-  addBuddyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6C5CE7',
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
-  },
-
-  addBuddyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  logoutButton: {
-    marginTop: 10,
-    backgroundColor: '#FFE8E8',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-  },
-
-  logoutButtonText: {
-    color: '#FF6B6B',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  // Modal Backdrop
 
   modalOverlay: {
     flex: 1,
@@ -788,18 +776,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  // Main Pop-up Container
-
   modalCard: {
     width: '100%',
-    backgroundColor: '#FDF5E6',
+    backgroundColor: '#FFFDF6',
     borderRadius: 28,
-    borderWidth: 4.5,
+    borderWidth: 4,
     borderColor: '#C7967D',
     padding: 20,
   },
-
-  // Header
 
   modalHeader: {
     flexDirection: 'row',
@@ -819,37 +803,33 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Outer Boxes
-
   sectionBox: {
     borderWidth: 3,
     borderColor: '#C7967D',
     borderRadius: 20,
     backgroundColor: '#FFFDF6',
-    padding: 16,
+    padding: 14,
     marginBottom: 14,
     alignItems: 'center',
   },
 
   sectionLabel: {
     fontFamily: 'Itim',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#824A20',
     alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 8,
   },
 
   shareCodeText: {
     fontFamily: 'Itim',
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
-    letterSpacing: 4,
+    letterSpacing: 3,
     color: '#824A20',
-    marginVertical: 4,
+    marginVertical: 2,
   },
-
-  // Input
 
   pillInput: {
     width: '100%',
@@ -863,10 +843,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Itim',
     fontSize: 18,
     color: '#824A20',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-
-  // Buttons
 
   blueButton: {
     backgroundColor: '#729AB5',
@@ -899,8 +877,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Friend Request Card
-
   innerCard: {
     width: '100%',
     borderWidth: 3,
@@ -921,16 +897,16 @@ const styles = StyleSheet.create({
   requestText: {
     flex: 1,
     fontFamily: 'Itim',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#824A20',
-    lineHeight: 18,
+    lineHeight: 16,
     marginRight: 8,
   },
 
-  goatHeadImage: {
-    width: 44,
-    height: 44,
+  modalGoatHead: {
+    width: 40,
+    height: 40,
   },
 
   actionRow: {
@@ -942,6 +918,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Itim',
     fontSize: 14,
     color: '#824A20',
-    marginTop: 4,
+    marginTop: 2,
   },
 });
