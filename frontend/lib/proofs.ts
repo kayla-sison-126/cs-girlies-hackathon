@@ -91,3 +91,20 @@ export async function submitGoalProof(
 
     return data;
 }
+
+export async function getLatestGoalProofStatus(
+    goalId: string
+) {
+    const { data, error } = await supabase
+        .from('goal_proofs')
+        .select('status')
+        .eq('goal_id', goalId)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        throw error;
+    }
+
+    return data?.status ?? null;
+}
