@@ -1,5 +1,7 @@
+
 import React, { useEffect, useState } from 'react';
 import { setLastTab } from '../../lib/lastTab';
+
 import {
   StyleSheet,
   Text,
@@ -9,7 +11,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,11 +26,18 @@ import {
 } from '../../lib/goals';
 
 import { getFriendProfile } from '../../lib/friendships';
+import { supabase } from '../../lib/supabase';
+
+// Fixed demo image.
+// Put the image at:
+// assets/images/demo-image.jpg
+const DEMO_PROOF_IMAGE = require('../../assets/images/demo-image.jpg');
 
 type Goal = {
   id: string;
   friendship_id: string;
   created_by: string;
+  assigned_to: string;
   title: string;
   description: string | null;
   is_verifiable: boolean;
@@ -45,7 +56,23 @@ export default function AllGoalsScreen() {
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [completingGoal, setCompletingGoal] = useState<string | null>(null);
+
+  const [completingGoal, setCompletingGoal] =
+    useState<string | null>(null);
+
+  // Current logged-in user
+  const [currentUserId, setCurrentUserId] =
+    useState<string | null>(null);
+
+  // Demo verification modal
+  const [reviewModalVisible, setReviewModalVisible] =
+    useState(false);
+
+  const [selectedGoal, setSelectedGoal] =
+    useState<Goal | null>(null);
+
+  const [reviewingGoal, setReviewingGoal] =
+    useState(false);
 
   useEffect(() => {
     loadGoals();
@@ -64,6 +91,8 @@ export default function AllGoalsScreen() {
         friendships,
         userId,
       } = await getAllUserGoals();
+
+      setCurrentUserId(userId);
 
       if (!goalData || goalData.length === 0) {
         setGoals([]);
@@ -106,7 +135,8 @@ export default function AllGoalsScreen() {
 
       setGoals(
         formattedGoals.filter(
-          (goal): goal is Goal => goal !== null
+          (goal): goal is Goal =>
+            goal !== null
         )
       );
     } catch (error) {
@@ -124,11 +154,22 @@ export default function AllGoalsScreen() {
     }
   }
 
-  async function handleCompleteGoal(goalId: string) {
+  /*
+   * ------------------------------------------------
+   * NORMAL CHECK-OFF GOAL
+   * ------------------------------------------------
+   *
+   * Used when the goal does NOT require photo
+   * verification.
+   */
+  async function handleCompleteGoal(
+    goalId: string
+  ) {
     try {
       setCompletingGoal(goalId);
 
-      const result = await completeGoal(goalId);
+      const result =
+        await completeGoal(goalId);
 
       setGoals((currentGoals) =>
         currentGoals.map((goal) =>
@@ -136,7 +177,9 @@ export default function AllGoalsScreen() {
             ? {
                 ...goal,
                 completed_by:
-                  result.completed_by ?? 'completed',
+                  result.completed_by ??
+                  currentUserId ??
+                  'completed',
                 completed_at:
                   result.completed_at ??
                   new Date().toISOString(),
@@ -161,17 +204,158 @@ export default function AllGoalsScreen() {
     }
   }
 
+  /*
+   * ------------------------------------------------
+   * OPEN DEMO VERIFICATION
+   * ------------------------------------------------
+   *
+   * We intentionally do NOT query goal_proofs here.
+   *
+   * For the demo, every verifiable goal uses the
+   * same local demo image.
+   */
+  function handleVerifyGoal(goal: Goal) {
+    setSelectedGoal(goal);
+    setReviewModalVisible(true);
+  }
+
+  /*
+   * ------------------------------------------------
+   * APPROVE DEMO PROOF
+   * ------------------------------------------------
+   *
+   * The creator is verifying the friend's goal.
+   *
+   * The assigned friend receives the completed_by
+   * value because they are the person who completed
+   * the goal.
+   */
+  async function handleApproveGoal() {
+    if (!selectedGoal) {
+      return;
+    }
+
+    try {
+      setReviewingGoal(true);
+
+      const now =
+        new Date().toISOString();
+
+      const {
+        data: completedGoal,
+        error,
+      } = await supabase
+        .from('goals')
+        .update({
+          completed_by:
+            selectedGoal.assigned_to,
+          completed_at: now,
+        })
+        .eq('id', selectedGoal.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      /*
+       * Update the UI immediately.
+       */
+      setGoals((currentGoals) =>
+        currentGoals.map((goal) =>
+          goal.id === selectedGoal.id
+            ? {
+                ...goal,
+                completed_by:
+                  completedGoal.completed_by ??
+                  selectedGoal.assigned_to,
+                completed_at:
+                  completedGoal.completed_at ??
+                  now,
+              }
+            : goal
+        )
+      );
+
+      /*
+       * Close the modal.
+       */
+      setReviewModalVisible(false);
+      setSelectedGoal(null);
+
+      Alert.alert(
+        'Goal Verified!',
+        'The goal has been checked off successfully.'
+      );
+    } catch (error: any) {
+      console.error(
+        'Failed to approve goal:',
+        error
+      );
+
+      Alert.alert(
+        'Verification Failed',
+        error?.message ??
+          'Could not check off this goal.'
+      );
+    } finally {
+      setReviewingGoal(false);
+    }
+  }
+
+  /*
+   * ------------------------------------------------
+   * REJECT DEMO PROOF
+   * ------------------------------------------------
+   *
+   * For the demo, simply close the verification
+   * window. The goal stays incomplete.
+   */
+  function handleRejectGoal() {
+    if (reviewingGoal) {
+      return;
+    }
+
+    setReviewModalVisible(false);
+    setSelectedGoal(null);
+  }
+
+  /*
+   * ------------------------------------------------
+   * CLOSE MODAL
+   * ------------------------------------------------
+   */
+  function closeReviewModal() {
+    if (reviewingGoal) {
+      return;
+    }
+
+    setReviewModalVisible(false);
+    setSelectedGoal(null);
+  }
+
+  /*
+   * ------------------------------------------------
+   * LOADING
+   * ------------------------------------------------
+   */
   if (!fontsLoaded || loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        
-        <View style={styles.loadingContainer}>
-          
+      <SafeAreaView
+        style={styles.container}
+      >
+        <View
+          style={styles.loadingContainer}
+        >
           <ActivityIndicator
             size="large"
             color="#824A20"
           />
-          <Text style={styles.loadingText}>
+
+          <Text
+            style={styles.loadingText}
+          >
             Loading your goals...
           </Text>
         </View>
@@ -179,100 +363,282 @@ export default function AllGoalsScreen() {
     );
   }
 
-  const dailyGoals = goals.filter((g) => g.completed_by === null);
-  const completedGoals = goals.filter((g) => g.completed_by !== null);
+  /*
+   * ------------------------------------------------
+   * GOAL SECTIONS
+   * ------------------------------------------------
+   */
+  const dailyGoals = goals.filter(
+    (goal) =>
+      goal.completed_by === null
+  );
+
+  const completedGoals = goals.filter(
+    (goal) =>
+      goal.completed_by !== null
+  );
 
   const sections = [
-    { title: 'Your Daily Goals', data: dailyGoals },
-    { title: 'Completed Goals', data: completedGoals },
+    {
+      title: 'Your Daily Goals',
+      data: dailyGoals,
+    },
+    {
+      title: 'Completed Goals',
+      data: completedGoals,
+    },
   ];
 
   return (
     <View style={styles.container}>
       <StatusBar hidden={true} />
 
-      {/* Hide default Expo Router tab bar */}
-      <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen
+        options={{
+          tabBarStyle: {
+            display: 'none',
+          },
+        }}
+      />
 
-      <View style={styles.grassWrapper} pointerEvents="none">
+      {/* Grass background */}
+      <View
+        style={styles.grassWrapper}
+        pointerEvents="none"
+      >
         <Image
           source={require('../../assets/images/GrassHill.png')}
-          style={styles.grassHillBackground}
+          style={
+            styles.grassHillBackground
+          }
           resizeMode="stretch"
         />
       </View>
 
-      <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          zIndex: 10,
+        }}
+      >
         {goals.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>🎯</Text>
-            <Text style={styles.emptyTitle}>No goals yet</Text>
-            <Text style={styles.emptyText}>
-              Create a goal with a streak buddy to get started!
+          <View
+            style={styles.emptyContainer}
+          >
+            <Text
+              style={styles.emptyEmoji}
+            >
+              🎯
+            </Text>
+
+            <Text
+              style={styles.emptyTitle}
+            >
+              No goals yet
+            </Text>
+
+            <Text
+              style={styles.emptyText}
+            >
+              Create a goal with a streak
+              buddy to get started!
             </Text>
           </View>
         ) : (
           <SectionList
             sections={sections}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContainer}
+            keyExtractor={(item) =>
+              item.id
+            }
+            contentContainerStyle={
+              styles.listContainer
+            }
             onRefresh={loadGoals}
             refreshing={loading}
-            showsVerticalScrollIndicator={false}
-            renderSectionHeader={({ section: { title, data } }) => {
-              if (data.length === 0) return null;
-              return <Text style={styles.sectionHeader}>{title}</Text>;
-            }}
-            renderItem={({ item }) => {
-              const isDone = item.completed_by !== null;
+            showsVerticalScrollIndicator={
+              false
+            }
+            renderSectionHeader={({
+              section: {
+                title,
+                data,
+              },
+            }) => {
+              if (data.length === 0) {
+                return null;
+              }
 
               return (
-                <View style={[styles.goalCard, isDone && styles.completedCard]}>
-                  <View style={styles.goalInfo}>
-                    <Text style={styles.goalTitle}>{item.title}</Text>
-                    <Text style={styles.cardSubText}>
-                      Goal Checker: {item.friendName}
+                <Text
+                  style={
+                    styles.sectionHeader
+                  }
+                >
+                  {title}
+                </Text>
+              );
+            }}
+            renderItem={({ item }) => {
+              const isDone =
+                item.completed_by !==
+                null;
+
+              const isGoalCreator =
+                item.created_by ===
+                currentUserId;
+
+              const isAssignedFriend =
+                item.assigned_to ===
+                currentUserId;
+
+              return (
+                <View
+                  style={[
+                    styles.goalCard,
+                    isDone &&
+                      styles.completedCard,
+                  ]}
+                >
+                  <View
+                    style={
+                      styles.goalInfo
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.goalTitle
+                      }
+                    >
+                      {item.title}
                     </Text>
-                    <Text style={styles.cardSubText}>
-                      Type: {item.is_verifiable ? 'Photo Verification' : 'Check-off'}
+
+                    <Text
+                      style={
+                        styles.cardSubText
+                      }
+                    >
+                      Goal Checker:{' '}
+                      {item.friendName}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.cardSubText
+                      }
+                    >
+                      Type:{' '}
+                      {item.is_verifiable
+                        ? 'Photo Verification'
+                        : 'Check-off'}
                     </Text>
                   </View>
 
+                  {/* COMPLETED */}
                   {isDone ? (
-                    <View style={styles.doneBtn}>
-                      <Text style={styles.actionBtnText}>Done!</Text>
+                    <View
+                      style={
+                        styles.doneBtn
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.actionBtnText
+                        }
+                      >
+                        Done!
+                      </Text>
                     </View>
-                  ) : item.is_verifiable ? (
-                    <TouchableOpacity
-                      style={styles.blueActionBtn}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        router.push({
-                          pathname: '/(tabs)/camera',
-                          params: {
-                            friendshipId: item.friendship_id,
-                            goalId: item.id,
-                            returnTo: '/(tabs)/goals',
-                          },
-                        } as any);
-                      }}
-                    >
-                      <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.actionBtnText}>Take Proof</Text>
-                    </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.blueActionBtn}
-                      activeOpacity={0.8}
-                      disabled={completingGoal === item.id}
-                      onPress={() => handleCompleteGoal(item.id)}
-                    >
-                      {completingGoal === item.id ? (
-                        <ActivityIndicator color="#FFF" size="small" />
-                      ) : (
-                        <Text style={styles.actionBtnText}>Mark as Complete</Text>
-                      )}
-                    </TouchableOpacity>
+                    <>
+                      {/* CREATOR */}
+                      {isGoalCreator ? (
+                        item.is_verifiable ? (
+                          <TouchableOpacity
+                            style={
+                              styles.blueActionBtn
+                            }
+                            activeOpacity={
+                              0.8
+                            }
+                            onPress={() =>
+                              handleVerifyGoal(
+                                item
+                              )
+                            }
+                            disabled={
+                              reviewingGoal
+                            }
+                          >
+                            <Ionicons
+                              name="eye-outline"
+                              size={18}
+                              color="#FFFFFF"
+                            />
+
+                            <Text
+                              style={
+                                styles.actionBtnText
+                              }
+                            >
+                              Verify
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={
+                              styles.blueActionBtn
+                            }
+                            activeOpacity={
+                              0.8
+                            }
+                            disabled={
+                              completingGoal ===
+                              item.id
+                            }
+                            onPress={() =>
+                              handleCompleteGoal(
+                                item.id
+                              )
+                            }
+                          >
+                            {completingGoal ===
+                            item.id ? (
+                              <ActivityIndicator
+                                color="#FFF"
+                                size="small"
+                              />
+                            ) : (
+                              <Text
+                                style={
+                                  styles.actionBtnText
+                                }
+                              >
+                                Verify Goal
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        )
+                      ) : null}
+
+                      {/* ASSIGNED FRIEND */}
+                      {isAssignedFriend &&
+                      !isGoalCreator ? (
+                        <View
+                          style={
+                            styles.waitingBtn
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.waitingText
+                            }
+                          >
+                            Waiting for
+                            verification
+                          </Text>
+                        </View>
+                      ) : null}
+                    </>
                   )}
                 </View>
               );
@@ -280,29 +646,233 @@ export default function AllGoalsScreen() {
           />
         )}
 
-        {/* Elevated Arched Bottom Navigation Bar */}
-        <View style={styles.bottomNavContainer}>
+        {/* =================================================
+            DEMO PROOF VERIFICATION MODAL
+            ================================================= */}
+        <Modal
+          visible={
+            reviewModalVisible
+          }
+          transparent
+          animationType="slide"
+          onRequestClose={
+            closeReviewModal
+          }
+        >
+          <View
+            style={
+              styles.modalOverlay
+            }
+          >
+            <View
+              style={
+                styles.reviewModal
+              }
+            >
+              {/* Header */}
+              <View
+                style={
+                  styles.reviewHeader
+                }
+              >
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.reviewTitle
+                    }
+                  >
+                    Verify Goal
+                  </Text>
+
+                  {selectedGoal && (
+                    <Text
+                      style={
+                        styles.reviewGoalTitle
+                      }
+                    >
+                      {selectedGoal.title}
+                    </Text>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={
+                    styles.closeModalBtn
+                  }
+                  onPress={
+                    closeReviewModal
+                  }
+                  disabled={
+                    reviewingGoal
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={26}
+                    color="#824A20"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Fixed demo image */}
+              <View
+                style={
+                  styles.proofImageContainer
+                }
+              >
+                <Image
+                  source={
+                    DEMO_PROOF_IMAGE
+                  }
+                  style={
+                    styles.proofImage
+                  }
+                  resizeMode="cover"
+                />
+              </View>
+
+              {/* Instruction */}
+              <Text
+                style={
+                  styles.proofInstruction
+                }
+              >
+                Does this photo prove that
+                the goal was completed?
+              </Text>
+
+              {/* Buttons */}
+              <View
+                style={
+                  styles.reviewButtons
+                }
+              >
+                <TouchableOpacity
+                  style={
+                    styles.rejectBtn
+                  }
+                  disabled={
+                    reviewingGoal
+                  }
+                  onPress={
+                    handleRejectGoal
+                  }
+                >
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={22}
+                    color="#824A20"
+                  />
+
+                  <Text
+                    style={
+                      styles.rejectBtnText
+                    }
+                  >
+                    Reject
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={
+                    styles.approveBtn
+                  }
+                  disabled={
+                    reviewingGoal
+                  }
+                  onPress={
+                    handleApproveGoal
+                  }
+                >
+                  {reviewingGoal ? (
+                    <ActivityIndicator
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="checkmark-circle-outline"
+                        size={22}
+                        color="#FFFFFF"
+                      />
+
+                      <Text
+                        style={
+                          styles.approveBtnText
+                        }
+                      >
+                        Approve
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* =================================================
+            BOTTOM NAVIGATION
+            ================================================= */}
+        <View
+          style={
+            styles.bottomNavContainer
+          }
+        >
           <TouchableOpacity
-            style={[styles.navCircleButton, styles.sideNavButton]}
-            onPress={() => router.push('/(tabs)' as any)}
+            style={[
+              styles.navCircleButton,
+              styles.sideNavButton,
+            ]}
+            onPress={() =>
+              router.push(
+                '/(tabs)' as any
+              )
+            }
             activeOpacity={0.85}
           >
-            <Ionicons name="people-outline" size={36} color="#FFFFFF" />
+            <Ionicons
+              name="people-outline"
+              size={36}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.navCircleButton, styles.centerNavButton]}
+            style={[
+              styles.navCircleButton,
+              styles.centerNavButton,
+            ]}
             activeOpacity={0.85}
           >
-            <Ionicons name="checkmark-done-outline" size={38} color="#F8DC81" />
+            <Ionicons
+              name="checkmark-done-outline"
+              size={38}
+              color="#F8DC81"
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.navCircleButton, styles.sideNavButton]}
-            onPress={() => router.push('/(tabs)/camera' as any)}
+            style={[
+              styles.navCircleButton,
+              styles.sideNavButton,
+            ]}
+            onPress={() =>
+              router.push(
+                '/(tabs)/camera' as any
+              )
+            }
             activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={36} color="#FFFFFF" />
+            <Ionicons
+              name="camera-outline"
+              size={36}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -357,7 +927,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     shadowColor: '#8a6b59',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
     shadowOpacity: 0.15,
     shadowRadius: 5,
     elevation: 3,
@@ -418,6 +991,147 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  waitingBtn: {
+    backgroundColor: '#D8D0C7',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 145,
+  },
+
+  waitingText: {
+    fontFamily: 'Itim',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#824A20',
+    textAlign: 'center',
+  },
+
+  /* =================================================
+     DEMO VERIFICATION MODAL
+     ================================================= */
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+
+  reviewModal: {
+    backgroundColor: '#FEF9F0',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 35,
+    maxHeight: '90%',
+    borderWidth: 4,
+    borderBottomWidth: 0,
+    borderColor: '#C7967D',
+  },
+
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+
+  reviewTitle: {
+    fontFamily: 'Itim',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#824A20',
+  },
+
+  reviewGoalTitle: {
+    fontFamily: 'Itim',
+    fontSize: 15,
+    color: '#824A20',
+    marginTop: 2,
+  },
+
+  closeModalBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3E5D8',
+  },
+
+  proofImageContainer: {
+    width: '100%',
+    height: 360,
+    backgroundColor: '#E8E1D9',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#D8BDAA',
+  },
+
+  proofImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  proofInstruction: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    color: '#824A20',
+    textAlign: 'center',
+    marginTop: 15,
+    marginBottom: 15,
+  },
+
+  reviewButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  rejectBtn: {
+    flex: 1,
+    backgroundColor: '#F3E5D8',
+    borderRadius: 24,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderColor: '#C7967D',
+  },
+
+  rejectBtnText: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#824A20',
+  },
+
+  approveBtn: {
+    flex: 1,
+    backgroundColor: '#729AB5',
+    borderRadius: 24,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  approveBtnText: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* =================================================
+     BOTTOM NAVIGATION
+     ================================================= */
+
   bottomNavContainer: {
     position: 'absolute',
     bottom: 48,
@@ -440,19 +1154,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#8a6b59',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 6,
   },
 
   sideNavButton: {
-    transform: [{ translateY: 0 }],
+    transform: [
+      {
+        translateY: 0,
+      },
+    ],
   },
 
   centerNavButton: {
-    transform: [{ translateY: -18 }],
+    transform: [
+      {
+        translateY: -18,
+      },
+    ],
   },
+
+  /* =================================================
+     LOADING
+     ================================================= */
 
   loadingContainer: {
     flex: 1,
@@ -466,6 +1195,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#824A20',
   },
+
+  /* =================================================
+     EMPTY STATE
+     ================================================= */
 
   emptyContainer: {
     flex: 1,

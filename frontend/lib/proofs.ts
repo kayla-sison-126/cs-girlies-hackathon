@@ -70,17 +70,7 @@ export async function submitGoalProof(
     );
   }
 
-  /*
-   * The creator and assignee must be different.
-   */
-  if (
-    !goal.created_by ||
-    goal.created_by === goal.assigned_to
-  ) {
-    throw new Error(
-      'This goal is not a valid accountability goal.'
-    );
-  }
+ 
 
   /*
    * ONLY the assigned user can submit.
