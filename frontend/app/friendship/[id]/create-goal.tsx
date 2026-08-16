@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +11,11 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { createGoal } from '../../../lib/goals';
+import {
+  getCurrentUser,
+  getFriendId,
+  getFriendProfile,
+} from '../../../lib/friendships';
 
 export default function CreateGoalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -19,8 +23,62 @@ export default function CreateGoalScreen() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+
   const [isVerifiable, setIsVerifiable] = useState(true);
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [friendId, setFriendId] = useState<string | null>(null);
+  const [friendName, setFriendName] = useState('Your Buddy');
+
+  const [assignedTo, setAssignedTo] = useState<
+    'me' | 'friend'
+  >('me');
+
+  const [loadingPeople, setLoadingPeople] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadPeople();
+  }, [id]);
+
+  async function loadPeople() {
+    try {
+      if (!id) {
+        throw new Error('Friendship ID is missing.');
+      }
+
+      setLoadingPeople(true);
+
+      const user = await getCurrentUser();
+
+      const otherUserId = await getFriendId(
+        id,
+        user.id
+      );
+
+      const profile = await getFriendProfile(
+        otherUserId
+      );
+
+      setCurrentUserId(user.id);
+      setFriendId(otherUserId);
+      setFriendName(
+        profile?.username || 'Your Buddy'
+      );
+    } catch (error) {
+      console.error(
+        'Failed to load friendship members:',
+        error
+      );
+
+      Alert.alert(
+        'Error',
+        'Could not load the people in this friendship.'
+      );
+    } finally {
+      setLoadingPeople(false);
+    }
+  }
 
   async function handleCreateGoal() {
     try {
@@ -40,12 +98,26 @@ export default function CreateGoalScreen() {
         return;
       }
 
+      if (!currentUserId || !friendId) {
+        Alert.alert(
+          'Error',
+          'Could not determine who can complete this goal.'
+        );
+        return;
+      }
+
+      const selectedUserId =
+        assignedTo === 'me'
+          ? currentUserId
+          : friendId;
+
       setSaving(true);
 
       await createGoal(
         id,
         title,
         description,
+        selectedUserId,
         isVerifiable
       );
 
@@ -71,6 +143,21 @@ export default function CreateGoalScreen() {
     }
   }
 
+  if (loadingPeople) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color="#6C5CE7"
+        />
+
+        <Text style={styles.loadingText}>
+          Loading friendship...
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -80,6 +167,8 @@ export default function CreateGoalScreen() {
       />
 
       <View style={styles.content}>
+        {/* GOAL TITLE */}
+
         <Text style={styles.label}>
           Goal Title
         </Text>
@@ -91,6 +180,8 @@ export default function CreateGoalScreen() {
           onChangeText={setTitle}
           editable={!saving}
         />
+
+        {/* DESCRIPTION */}
 
         <Text style={styles.label}>
           Description
@@ -108,15 +199,72 @@ export default function CreateGoalScreen() {
           editable={!saving}
         />
 
+        {/* WHO IS COMPLETING THE GOAL */}
+
+        <Text style={styles.label}>
+          Who is completing this goal?
+        </Text>
+
+        <View style={styles.optionRow}>
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              assignedTo === 'me' &&
+                styles.selectedOption,
+            ]}
+            onPress={() => setAssignedTo('me')}
+            disabled={saving}
+          >
+            <Text
+              style={[
+                styles.optionText,
+                assignedTo === 'me' &&
+                  styles.selectedOptionText,
+              ]}
+            >
+              You
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              assignedTo === 'friend' &&
+                styles.selectedOption,
+            ]}
+            onPress={() => setAssignedTo('friend')}
+            disabled={saving}
+          >
+            <Text
+              style={[
+                styles.optionText,
+                assignedTo === 'friend' &&
+                  styles.selectedOptionText,
+              ]}
+            >
+              {friendName}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* GOAL TYPE */}
+
+        <Text style={styles.label}>
+          Require photo verification?
+        </Text>
+
         <View style={styles.switchRow}>
           <View style={styles.switchTextContainer}>
             <Text style={styles.switchTitle}>
-              Require photo proof
+              {isVerifiable
+                ? 'Photo Verification'
+                : 'Check-Off'}
             </Text>
 
             <Text style={styles.switchDescription}>
-              Your friend will review a photo before
-              the goal is verified.
+              {isVerifiable
+                ? 'Your friend will review a photo before the goal is verified.'
+                : 'The goal can be completed with a simple check-off.'}
             </Text>
           </View>
 
@@ -126,6 +274,8 @@ export default function CreateGoalScreen() {
             disabled={saving}
           />
         </View>
+
+        {/* CREATE GOAL */}
 
         <TouchableOpacity
           style={[
@@ -152,6 +302,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#636E72',
   },
 
   content: {
@@ -182,8 +345,39 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
 
+  optionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  optionButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+
+  selectedOption: {
+    backgroundColor: '#EDEAFF',
+    borderColor: '#6C5CE7',
+  },
+
+  optionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#636E72',
+  },
+
+  selectedOptionText: {
+    color: '#6C5CE7',
+    fontWeight: '700',
+  },
+
   switchRow: {
-    marginTop: 24,
+    marginTop: 4,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
@@ -228,4 +422,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

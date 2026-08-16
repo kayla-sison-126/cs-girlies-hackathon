@@ -5,6 +5,7 @@ export async function createGoal(
   friendshipId: string,
   title: string,
   description: string,
+  assignedTo: string,
   isVerifiable: boolean
 ) {
   const {
@@ -16,11 +17,16 @@ export async function createGoal(
     throw new Error('You must be logged in.');
   }
 
+  if (!assignedTo) {
+    throw new Error('You must select who will complete this goal.');
+  }
+
   const { data, error } = await supabase
     .from('goals')
     .insert({
       friendship_id: friendshipId,
       created_by: user.id,
+      assigned_to: assignedTo,
       title: title.trim(),
       description: description.trim() || null,
       is_verifiable: isVerifiable,
@@ -74,4 +80,56 @@ export async function completeGoal(goalId: string) {
   }
 
   return completeGoalWithRewards(goalId);
+}
+
+export async function getAllUserGoals() {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error('You must be logged in.');
+  }
+
+  const { data: friendships, error: friendshipError } =
+    await supabase
+      .from('friendships')
+      .select('*')
+      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`);
+
+  if (friendshipError) {
+    throw friendshipError;
+  }
+
+  if (!friendships || friendships.length === 0) {
+    return {
+      goals: [],
+      friendships: [],
+      userId: user.id,
+    };
+  }
+
+  const friendshipIds = friendships.map(
+    (friendship) => friendship.id
+  );
+
+  const { data: goals, error: goalError } =
+    await supabase
+      .from('goals')
+      .select('*')
+      .in('friendship_id', friendshipIds)
+      .order('created_at', {
+        ascending: false,
+      });
+
+  if (goalError) {
+    throw goalError;
+  }
+
+  return {
+    goals: goals || [],
+    friendships,
+    userId: user.id,
+  };
 }

@@ -1,93 +1,82 @@
 import { supabase } from './supabase';
+import { uploadGoalProof } from './storage';
 
 export async function submitGoalProof(
-    goalId: string,
-    photoUri: string
+  goalId: string,
+  photoUri: string
 ) {
-    if (!goalId) {
-        throw new Error('Goal ID is missing.');
-    }
+  if (!goalId) {
+    throw new Error('Goal ID is missing.');
+  }
 
-    if (!photoUri) {
-        throw new Error('Photo is missing.');
-    }
+  if (!photoUri) {
+    throw new Error('Photo is missing.');
+  }
 
-    /*
-     * Get the currently logged-in user.
-     */
-    const {
-        data: { user },
-        error: userError,
-    } = await supabase.auth.getUser();
+  /*
+   * Get the currently logged-in user.
+   */
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-    if (userError) {
-        throw userError;
-    }
+  if (userError) {
+    throw userError;
+  }
 
-    if (!user) {
-        throw new Error(
-            'You must be logged in to submit proof.'
-        );
-    }
+  if (!user) {
+    throw new Error(
+      'You must be logged in to submit proof.'
+    );
+  }
 
-    /*
-     * Convert the camera's local URI into an ArrayBuffer.
-     * Supabase Storage can upload this directly.
-     */
-    const response = await fetch(photoUri);
-    const arrayBuffer = await response.arrayBuffer();
+  /*
+   * Upload the photo using the storage helper.
+   */
+  const publicUrl = await uploadGoalProof(
+    photoUri,
+    user.id,
+    goalId
+  );
 
-    /*
-     * Give every uploaded photo its own unique path.
-     *
-     * Example:
-     * user-id/goal-id/1723456789012.jpg
-     */
-    const filePath = `${user.id}/${goalId}/${Date.now()}.jpg`;
+  /*
+   * Save the proof in the goal_proofs table.
+   *
+   * It starts as "pending" because the friend
+   * still needs to review it.
+   */
+  const { data, error: proofError } = await supabase
+    .from('goal_proofs')
+    .insert({
+      goal_id: goalId,
+      submitted_by: user.id,
+      image_url: publicUrl,
+      status: 'pending',
+    })
+    .select()
+    .single();
 
-    /*
-     * Upload the photo to the goal-proofs bucket.
-     */
-    const { error: uploadError } = await supabase.storage
-        .from('goal-proofs')
-        .upload(filePath, arrayBuffer, {
-            contentType: 'image/jpeg',
-            upsert: false,
-        });
+  if (proofError) {
+    throw proofError;
+  }
 
-    if (uploadError) {
-        throw uploadError;
-    }
+  return data;
+}
 
-    /*
-     * Get the public URL for the uploaded image.
-     */
-    const {
-        data: { publicUrl },
-    } = supabase.storage
-        .from('goal-proofs')
-        .getPublicUrl(filePath);
+export async function getLatestGoalProofStatus(
+  goalId: string
+) {
+  const { data, error } = await supabase
+    .from('goal_proofs')
+    .select('status')
+    .eq('goal_id', goalId)
+    .limit(1)
+    .maybeSingle();
 
-    /*
-     * Save the proof in the goal_proofs table.
-     *
-     * It starts as "pending" because the friend
-     * still needs to review it.
-     */
-    const { data, error: proofError } = await supabase
-        .from('goal_proofs')
-        .insert({
-            goal_id: goalId,
-            submitted_by: user.id,
-            image_url: publicUrl,
-            status: 'pending',
-        })
-        .select()
-        .single();
+  if (error) {
+    throw error;
+  }
 
-    if (proofError) {
-        throw proofError;
-    }
-
-    return data;
+  return data?.status ?? null;
 }

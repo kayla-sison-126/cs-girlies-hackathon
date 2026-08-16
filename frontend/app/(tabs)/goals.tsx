@@ -10,8 +10,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { setLastTab } from '../../lib/lastTab';
-import { supabase } from '../../lib/supabase';
+
+import {
+  getAllUserGoals,
+  completeGoal,
+} from '../../lib/goals';
+
+import { getFriendProfile } from '../../lib/friendships';
 
 type Goal = {
   id: string;
@@ -46,51 +51,16 @@ export default function AllGoalsScreen() {
       setLoading(true);
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        goals: goalData,
+        friendships,
+        userId,
+      } = await getAllUserGoals();
 
-      if (userError || !user) {
-        throw new Error('You must be logged in.');
-      }
-
-      // Get friendships involving the current user
-      const { data: friendships, error: friendshipError } =
-        await supabase
-          .from('friendships')
-          .select('*')
-          .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`);
-
-      if (friendshipError) {
-        throw friendshipError;
-      }
-
-      if (!friendships || friendships.length === 0) {
+      if (!goalData || goalData.length === 0) {
         setGoals([]);
         return;
       }
 
-      const friendshipIds = friendships.map(
-        (friendship) => friendship.id
-      );
-
-      // Get all goals belonging to those friendships
-      const { data: goalData, error: goalError } = await supabase
-        .from('goals')
-        .select('*')
-        .in('friendship_id', friendshipIds)
-        .order('created_at', { ascending: false });
-
-      if (goalError) {
-        throw goalError;
-      }
-
-      if (!goalData) {
-        setGoals([]);
-        return;
-      }
-
-      // Get the friend's profile for each goal
       const formattedGoals = await Promise.all(
         goalData.map(async (goal) => {
           const friendship = friendships.find(
@@ -103,21 +73,18 @@ export default function AllGoalsScreen() {
           }
 
           const friendId =
-            friendship.user_a_id === user.id
+            friendship.user_a_id === userId
               ? friendship.user_b_id
               : friendship.user_a_id;
 
           let friendName = 'Friend';
 
           if (friendId) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('display_name')
-              .eq('id', friendId)
-              .maybeSingle();
+            const profile =
+              await getFriendProfile(friendId);
 
-            if (profile?.display_name) {
-              friendName = profile.display_name;
+            if (profile?.username) {
+              friendName = profile.username;
             }
           }
 
@@ -134,7 +101,11 @@ export default function AllGoalsScreen() {
         )
       );
     } catch (error) {
-      console.error('Failed to load goals:', error);
+      console.error(
+        'Failed to load goals:',
+        error
+      );
+
       Alert.alert(
         'Error',
         'Could not load your goals.'
@@ -144,49 +115,37 @@ export default function AllGoalsScreen() {
     }
   }
 
-  async function completeGoal(goalId: string) {
+  async function handleCompleteGoal(goalId: string) {
     try {
       setCompletingGoal(goalId);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const result = await completeGoal(goalId);
 
-      if (userError || !user) {
-        throw new Error('You must be logged in.');
-      }
-
-      const { error } = await supabase
-        .from('goals')
-        .update({
-          completed_by: user.id,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', goalId);
-
-      if (error) {
-        throw error;
-      }
-
-      // Update the local screen immediately
       setGoals((currentGoals) =>
         currentGoals.map((goal) =>
           goal.id === goalId
             ? {
                 ...goal,
-                completed_by: user.id,
-                completed_at: new Date().toISOString(),
+                completed_by:
+                  result.completed_by ?? 'completed',
+                completed_at:
+                  result.completed_at ??
+                  new Date().toISOString(),
               }
             : goal
         )
       );
     } catch (error) {
-      console.error('Failed to complete goal:', error);
+      console.error(
+        'Failed to complete goal:',
+        error
+      );
 
       Alert.alert(
         'Error',
-        'Could not complete this goal.'
+        error instanceof Error
+          ? error.message
+          : 'Could not complete this goal.'
       );
     } finally {
       setCompletingGoal(null);
@@ -213,7 +172,9 @@ export default function AllGoalsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerBar}>
-        <Text style={styles.title}>All Goals 📋</Text>
+        <Text style={styles.title}>
+          All Goals 📋
+        </Text>
 
         <Text style={styles.subtitle}>
           Your master accountability checklist
@@ -222,14 +183,17 @@ export default function AllGoalsScreen() {
 
       {goals.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🎯</Text>
+          <Text style={styles.emptyEmoji}>
+            🎯
+          </Text>
 
           <Text style={styles.emptyTitle}>
             No goals yet
           </Text>
 
           <Text style={styles.emptyText}>
-            Create a goal with a streak buddy to get started!
+            Create a goal with a streak buddy
+            to get started!
           </Text>
         </View>
       ) : (
@@ -240,39 +204,53 @@ export default function AllGoalsScreen() {
           onRefresh={loadGoals}
           refreshing={loading}
           renderItem={({ item }) => {
-            const isDone = item.completed_by !== null;
+            const isDone =
+              item.completed_by !== null;
 
             return (
               <View
                 style={[
                   styles.goalCard,
-                  isDone && styles.completedCard,
+                  isDone &&
+                    styles.completedCard,
                 ]}
               >
                 <View style={styles.goalInfo}>
                   <Text
                     style={[
                       styles.goalTitle,
-                      isDone && styles.completedText,
+                      isDone &&
+                        styles.completedText,
                     ]}
                   >
                     {item.title}
                   </Text>
 
-                  <Text style={styles.friendTag}>
+                  <Text
+                    style={styles.friendTag}
+                  >
                     Buddy: {item.friendName}
                   </Text>
 
-                  {item.is_verifiable && !isDone && (
-                    <Text style={styles.proofLabel}>
-                      📷 Photo proof required
-                    </Text>
-                  )}
+                  {item.is_verifiable &&
+                    !isDone && (
+                      <Text
+                        style={
+                          styles.proofLabel
+                        }
+                      >
+                        📷 Photo proof required
+                      </Text>
+                    )}
                 </View>
 
                 {isDone ? (
-                  <View style={styles.doneBadge}>
-                    <Text style={styles.doneText}>
+                  <View
+                    style={styles.doneBadge}
+                  >
+                    <Text
+                      style={styles.doneText}
+                    >
                       ✓ Completed
                     </Text>
                   </View>
@@ -284,16 +262,20 @@ export default function AllGoalsScreen() {
                     ]}
                     onPress={() => {
                       router.push({
-                        pathname: '/(tabs)/camera',
+                        pathname:
+                          '/(tabs)/camera',
                         params: {
-                          friendshipId: item.friendship_id,
+                          friendshipId:
+                            item.friendship_id,
                           goalId: item.id,
                           returnTo: '/(tabs)/goals',
                         },
                       } as any);
                     }}
                   >
-                    <Text style={styles.btnText}>
+                    <Text
+                      style={styles.btnText}
+                    >
                       📷 Proof
                     </Text>
                   </TouchableOpacity>
@@ -303,15 +285,25 @@ export default function AllGoalsScreen() {
                       styles.actionBtn,
                       styles.checkBtn,
                     ]}
-                    disabled={completingGoal === item.id}
+                    disabled={
+                      completingGoal ===
+                      item.id
+                    }
                     onPress={() =>
-                      completeGoal(item.id)
+                      handleCompleteGoal(
+                        item.id
+                      )
                     }
                   >
-                    {completingGoal === item.id ? (
-                      <ActivityIndicator color="#FFF" />
+                    {completingGoal ===
+                    item.id ? (
+                      <ActivityIndicator
+                        color="#FFF"
+                      />
                     ) : (
-                      <Text style={styles.btnText}>
+                      <Text
+                        style={styles.btnText}
+                      >
                         ✅ Complete
                       </Text>
                     )}
