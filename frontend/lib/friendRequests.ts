@@ -134,12 +134,18 @@ export async function getReceivedFriendRequests() {
       ascending: false,
     });
 
-  if (error) {
+    if (error) {
     throw error;
   }
 
-  return data || [];
+  return (data || []).map((request) => ({
+    ...request,
+    sender: Array.isArray(request.sender)
+      ? request.sender[0] || null
+      : request.sender || null,
+  }));
 }
+
 
 
 /*

@@ -9,6 +9,7 @@ export async function createPet(
     .insert({
       friendship_id: friendshipId,
       name: name.trim() || 'Buddy',
+      equipped_item: null,
     })
     .select()
     .single();
@@ -20,7 +21,9 @@ export async function createPet(
   return data;
 }
 
-export async function getPet(friendshipId: string) {
+export async function getPet(
+  friendshipId: string
+) {
   const { data, error } = await supabase
     .from('pets')
     .select('*')
@@ -34,16 +37,33 @@ export async function getPet(friendshipId: string) {
   return data;
 }
 
-export async function updatePetHealth(
+export async function equipPetItem(
   friendshipId: string,
-  health: number
+  itemName: string
 ) {
-  const safeHealth = Math.max(0, Math.min(100, health));
-
   const { data, error } = await supabase
     .from('pets')
     .update({
-      health: safeHealth,
+      equipped_item: itemName,
+    })
+    .eq('friendship_id', friendshipId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function unequipPetItem(
+  friendshipId: string
+) {
+  const { data, error } = await supabase
+    .from('pets')
+    .update({
+      equipped_item: null,
     })
     .eq('friendship_id', friendshipId)
     .select()

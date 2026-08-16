@@ -9,7 +9,7 @@ import {
   TextInput,
   Modal,
   Alert,
-  Image
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -69,6 +69,7 @@ export default function StreakBuddiesScreen() {
       loadFriendships();
     }, [])
   );
+
   useEffect(() => {
     setLastTab('/(tabs)/index');
   }, []);
@@ -114,7 +115,7 @@ export default function StreakBuddiesScreen() {
 
           const { data: profile } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, username')
             .eq('id', friendId)
             .maybeSingle();
 
@@ -139,8 +140,7 @@ export default function StreakBuddiesScreen() {
 
           return {
             id: friendship.id,
-            friendName:
-              profile?.username || 'Friend',
+            friendName: profile?.username || 'Friend',
             petName: pet?.name || 'Buddy',
             petEmoji: '🐾',
             streakDays: stats?.streak_days || 0,
@@ -174,7 +174,7 @@ export default function StreakBuddiesScreen() {
       ]);
 
       setMyPairingCode(code || '');
-      setRequests(receivedRequests as FriendRequest[]);
+      setRequests(receivedRequests);
       setModalVisible(true);
     } catch (error) {
       console.error(
@@ -219,17 +219,14 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not send request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
     }
   }
 
-  async function handleAcceptRequest(
-    requestId: string
-  ) {
+  async function handleAcceptRequest(requestId: string) {
     try {
       setRequestLoading(true);
 
@@ -264,17 +261,14 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not accept request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
     }
   }
 
-  async function handleDeclineRequest(
-    requestId: string
-  ) {
+  async function handleDeclineRequest(requestId: string) {
     try {
       setRequestLoading(true);
 
@@ -293,8 +287,7 @@ export default function StreakBuddiesScreen() {
 
       Alert.alert(
         'Could not decline request',
-        error?.message ||
-          'Something went wrong.'
+        error?.message || 'Something went wrong.'
       );
     } finally {
       setRequestLoading(false);
@@ -451,111 +444,146 @@ export default function StreakBuddiesScreen() {
       )}
 
       {/* ADD BUDDY MODAL */}
-      {/* ADD BUDDY MODAL */}
-<Modal
-  visible={modalVisible}
-  animationType="fade"
-  transparent
-  onRequestClose={() => setModalVisible(false)}
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalCard}>
-      {/* Header */}
-      <View style={styles.modalHeader}>
-        <Text style={styles.modalTitle}>Add Friend</Text>
-        <TouchableOpacity
-          onPress={() => setModalVisible(false)}
-          style={styles.closeButton}
-        >
-          <Ionicons name="close" size={24} color="#C7967D" />
-        </TouchableOpacity>
-      </View>
 
-      {/* Section 1: Share Code */}
-      <View style={styles.sectionBox}>
-        <Text style={styles.sectionLabel}>Share your friend code:</Text>
-        <Text style={styles.shareCodeText}>
-          {myPairingCode || 'HLX92FC1'}
-        </Text>
-      </View>
+      <Modal
+        visible={modalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
 
-      {/* Section 2: Enter Code */}
-      <View style={styles.sectionBox}>
-        <Text style={styles.sectionLabel}>Enter a friend code:</Text>
-        <TextInput
-          style={styles.pillInput}
-          value={friendCode}
-          onChangeText={setFriendCode}
-          autoCapitalize="characters"
-          autoCorrect={false}
-        />
-        <TouchableOpacity
-          style={styles.blueButton}
-          onPress={handleSendRequest}
-          disabled={requestLoading}
-          activeOpacity={0.8}
-        >
-          {requestLoading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Text style={styles.buttonText}>Send Request</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+            {/* Header */}
 
-      {/* Section 3: Received Requests */}
-      <View style={styles.sectionBox}>
-        <Text style={styles.sectionLabel}>Received Friend Requests</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Add Friend
+              </Text>
 
-        {requests.length === 0 ? (
-          <Text style={styles.noRequestsText}>No pending requests.</Text>
-        ) : (
-          requests.map((request) => (
-            <View key={request.id} style={styles.innerCard}>
-              <View style={styles.innerCardTop}>
-                <Text style={styles.requestText}>
-                  {request.sender?.display_name ||
-                    request.sender?.username ||
-                    'Someone'}{' '}
-                  [{request.sender?.pairing_code || ''}]
-                  {'\n'}wants to be friends!
-                </Text>
-                {/* Goat Icon Placeholder / Asset */}
-                <Image
-                  source={goatHeadImg}
-                  style={styles.goatHeadImage}
-                  resizeMode="contain"
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#C7967D"
                 />
-              </View>
-
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.blueButtonSmall}
-                  onPress={() => handleAcceptRequest(request.id)}
-                  disabled={requestLoading}
-                >
-                  <Text style={styles.buttonText}>Accept</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.redButtonSmall}
-                  onPress={() => handleDeclineRequest(request.id)}
-                  disabled={requestLoading}
-                >
-                  <Text style={styles.buttonText}>Decline</Text>
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
-      </View>
-    </View>
-  </View>
-</Modal>
-      
-      
 
+            {/* Section 1: Share Code */}
 
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Share your friend code:
+              </Text>
+
+              <Text style={styles.shareCodeText}>
+                {myPairingCode || 'Loading...'}
+              </Text>
+            </View>
+
+            {/* Section 2: Enter Code */}
+
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Enter a friend code:
+              </Text>
+
+              <TextInput
+                style={styles.pillInput}
+                value={friendCode}
+                onChangeText={setFriendCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity
+                style={styles.blueButton}
+                onPress={handleSendRequest}
+                disabled={requestLoading}
+                activeOpacity={0.8}
+              >
+                {requestLoading ? (
+                  <ActivityIndicator
+                    color="#FFFFFF"
+                    size="small"
+                  />
+                ) : (
+                  <Text style={styles.buttonText}>
+                    Send Request
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Section 3: Received Requests */}
+
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionLabel}>
+                Received Friend Requests
+              </Text>
+
+              {requests.length === 0 ? (
+                <Text style={styles.noRequestsText}>
+                  No pending requests.
+                </Text>
+              ) : (
+                requests.map((request) => (
+                  <View
+                    key={request.id}
+                    style={styles.innerCard}
+                  >
+                    <View style={styles.innerCardTop}>
+                      <Text style={styles.requestText}>
+                        {request.sender?.username ||
+                          'Someone'}{' '}
+                        [{request.sender?.pairing_code || ''}]
+                        {'\n'}
+                        wants to be friends!
+                      </Text>
+
+                      <Image
+                        source={goatHeadImg}
+                        style={styles.goatHeadImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={styles.blueButtonSmall}
+                        onPress={() =>
+                          handleAcceptRequest(request.id)
+                        }
+                        disabled={requestLoading}
+                      >
+                        <Text style={styles.buttonText}>
+                          Accept
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.redButtonSmall}
+                        onPress={() =>
+                          handleDeclineRequest(request.id)
+                        }
+                        disabled={requestLoading}
+                      >
+                        <Text style={styles.buttonText}>
+                          Decline
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -750,169 +778,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
-  },
-
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '90%',
-  },
-
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#2D3436',
-  },
-
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#636E72',
-    marginTop: 4,
-    maxWidth: 280,
-  },
-
-  closeButton: {
-    padding: 4,
-  },
-
-  modalSection: {
-    marginBottom: 22,
-  },
-
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#2D3436',
-    marginBottom: 8,
-  },
-
-  codeBox: {
-    backgroundColor: '#EDEAFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-
-  codeText: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: 3,
-    color: '#6C5CE7',
-  },
-
-  helperText: {
-    fontSize: 12,
-    color: '#636E72',
-    marginTop: 6,
-  },
-
-  codeInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#DCDDE1',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: '#2D3436',
-    backgroundColor: '#FAFAFA',
-    marginBottom: 10,
-  },
-
-  sendButton: {
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: '#6C5CE7',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  noRequestsText: {
-    fontSize: 13,
-    color: '#636E72',
-    backgroundColor: '#F8F9FA',
-    padding: 14,
-    borderRadius: 10,
-  },
-
-  requestCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-
-  requestInfo: {
-    marginBottom: 10,
-  },
-
-  requestName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2D3436',
-  },
-
-  requestCode: {
-    fontSize: 11,
-    color: '#636E72',
-    marginTop: 2,
-  },
-
-  requestActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  acceptButton: {
-    flex: 1,
-    backgroundColor: '#00B894',
-    paddingVertical: 9,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-
-  acceptButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  declineButton: {
-    flex: 1,
-    backgroundColor: '#FFE8E8',
-    paddingVertical: 9,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-
-  declineButtonText: {
-    color: '#FF6B6B',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-
   // Modal Backdrop
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -922,16 +789,18 @@ const styles = StyleSheet.create({
   },
 
   // Main Pop-up Container
+
   modalCard: {
     width: '100%',
-    backgroundColor: '#FDF5E6', // Cream base color
+    backgroundColor: '#FDF5E6',
     borderRadius: 28,
     borderWidth: 4.5,
-    borderColor: '#C7967D', // Warm salmon/brown outline
+    borderColor: '#C7967D',
     padding: 20,
   },
 
-  // Header Bar
+  // Header
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -950,7 +819,8 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Outer Boxes (Sections)
+  // Outer Boxes
+
   sectionBox: {
     borderWidth: 3,
     borderColor: '#C7967D',
@@ -979,7 +849,8 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
 
-  // Inputs
+  // Input
+
   pillInput: {
     width: '100%',
     height: 40,
@@ -996,6 +867,7 @@ const styles = StyleSheet.create({
   },
 
   // Buttons
+
   blueButton: {
     backgroundColor: '#729AB5',
     borderRadius: 18,
@@ -1027,7 +899,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Inner Card (Friend Requests)
+  // Friend Request Card
+
   innerCard: {
     width: '100%',
     borderWidth: 3,
@@ -1035,7 +908,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     backgroundColor: '#FFFFFF',
-    marginBottom: 8
+    marginBottom: 8,
   },
 
   innerCardTop: {
@@ -1046,11 +919,13 @@ const styles = StyleSheet.create({
   },
 
   requestText: {
+    flex: 1,
     fontFamily: 'Itim',
     fontSize: 14,
     fontWeight: '700',
     color: '#824A20',
     lineHeight: 18,
+    marginRight: 8,
   },
 
   goatHeadImage: {
@@ -1070,4 +945,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-
