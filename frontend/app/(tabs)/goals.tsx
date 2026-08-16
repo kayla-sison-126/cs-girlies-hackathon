@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 
 import {
   getAllUserGoals,
@@ -163,7 +164,9 @@ export default function AllGoalsScreen() {
   if (!fontsLoaded || loading) {
     return (
       <SafeAreaView style={styles.container}>
+        
         <View style={styles.loadingContainer}>
+          
           <ActivityIndicator
             size="large"
             color="#824A20"
@@ -186,10 +189,11 @@ export default function AllGoalsScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar hidden={true} />
+
       {/* Hide default Expo Router tab bar */}
       <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
 
-      {/* Full-width Grass Hill background */}
       <View style={styles.grassWrapper} pointerEvents="none">
         <Image
           source={require('../../assets/images/GrassHill.png')}
@@ -343,7 +347,7 @@ const styles = StyleSheet.create({
   },
 
   goalCard: {
-    backgroundColor: '#FFFDF6',
+    backgroundColor: '#FEF9F0',
     borderRadius: 28,
     borderWidth: 3.5,
     borderColor: '#C7967D',
@@ -430,6 +434,8 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#FEF9F0',
     backgroundColor: '#C7967D',
     justifyContent: 'center',
     alignItems: 'center',
