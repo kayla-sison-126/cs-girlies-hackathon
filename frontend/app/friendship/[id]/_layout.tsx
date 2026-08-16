@@ -13,7 +13,7 @@ export default function FriendshipLayout() {
         },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Friend Home' }} />
+      <Stack.Screen name="index" options={{ title: '' }} />
       <Stack.Screen name="shop" options={{ title: '' }} />
       <Stack.Screen
         name="create-goal" // update to match route path
