@@ -28,7 +28,7 @@ export async function getPet(
     .from('pets')
     .select('*')
     .eq('friendship_id', friendshipId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw error;

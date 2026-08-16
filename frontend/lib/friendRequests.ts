@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { createPet } from './pets';
 
 /*
  * Get the current user's personal pairing code.
@@ -204,6 +205,7 @@ export async function acceptFriendRequest(
       .toUpperCase();
 
   // Create the friendship
+    // Create the friendship
   const {
     data: friendship,
     error: friendshipError,
@@ -220,6 +222,12 @@ export async function acceptFriendRequest(
   if (friendshipError) {
     throw friendshipError;
   }
+
+  // Create the shared pet for this friendship
+  await createPet(
+    friendship.id,
+    'Buddy'
+  );
 
   // Mark request as accepted
   const { error: updateError } =
