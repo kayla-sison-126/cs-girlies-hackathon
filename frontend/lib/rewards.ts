@@ -5,7 +5,8 @@ const POINTS_PER_GOAL = 10;
 
 
 export async function completeGoalWithRewards(
-  goalId: string
+  goalId: string,
+  completedByUserId?: string
 ) {
   /*
    * ------------------------------------------------
@@ -21,6 +22,9 @@ export async function completeGoalWithRewards(
   if (userError || !user) {
     throw new Error('You must be logged in.');
   }
+
+  const completingUserId =
+  completedByUserId || user.id;
 
   /*
    * ------------------------------------------------
@@ -47,7 +51,7 @@ export async function completeGoalWithRewards(
    * ------------------------------------------------
    */
 
-  if (goal.assigned_to !== user.id) {
+if (goal.assigned_to !== completingUserId) {
     throw new Error(
       'You are not assigned to complete this goal.'
     );
@@ -75,7 +79,7 @@ export async function completeGoalWithRewards(
   } = await supabase
     .from('goals')
     .update({
-      completed_by: user.id,
+      completed_by: completingUserId,
       completed_at: new Date().toISOString(),
     })
     .eq('id', goalId)
@@ -97,7 +101,7 @@ export async function completeGoalWithRewards(
   } = await supabase
     .from('user_stats')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', completingUserId)
     .maybeSingle();
 
   /*
@@ -153,7 +157,7 @@ export async function completeGoalWithRewards(
     await supabase
       .from('user_stats')
       .upsert({
-        user_id: user.id,
+        user_id: completingUserId,
         points:
           (existingStats?.points || 0) +
           POINTS_PER_GOAL,

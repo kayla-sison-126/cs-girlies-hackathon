@@ -31,7 +31,12 @@ import {
 } from "../../../lib/friendships";
 
 import { getGoals } from "../../../lib/goals";
-import { getLatestGoalProofStatus } from "../../../lib/proofs";
+
+import {
+  getLatestGoalProof,
+  approveGoalProof,
+  declineGoalProof,
+} from "../../../lib/proofs";
 
 interface AccountabilityGoal {
   id: string;
@@ -40,6 +45,18 @@ interface AccountabilityGoal {
   verifiedByFriend: boolean;
   isVerifiable: boolean;
   assignedToUser: boolean;
+  proofId: string | null;
+  proofStatus:
+    | "pending"
+    | "approved"
+    | "declined"
+    | null;
+  proofImageUrl: string | null;
+  submittedBy: string | null;
+  assignedTo: string | null;
+  createdBy: string | null;
+  canReview: boolean;
+  canSubmit: boolean;
 }
 
 export default function FriendshipHomeScreen() {
@@ -62,7 +79,9 @@ export default function FriendshipHomeScreen() {
 
   const [selectedGoalForReview, setSelectedGoalForReview] =
     useState<AccountabilityGoal | null>(null);
-  const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
+
+  const [isReviewModalVisible, setIsReviewModalVisible] =
+    useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,178 +93,603 @@ export default function FriendshipHomeScreen() {
     try {
       setLoading(true);
 
-      if (!id) throw new Error("Friendship ID is missing.");
+      if (!id) {
+        throw new Error("Friendship ID is missing.");
+      }
 
       const user = await getCurrentUser();
+
       await getFriendship(id);
 
-      const friendId = await getFriendId(id, user.id);
-      const profile = await getFriendProfile(friendId);
-      setFriendName(profile?.username || "Buddy");
+      const friendId = await getFriendId(
+        id,
+        user.id
+      );
+
+      const profile = await getFriendProfile(
+        friendId
+      );
+
+      setFriendName(
+        profile?.username || "Buddy"
+      );
 
       const pet = await getFriendshipPet(id);
+
       if (pet) {
-        setPetName(pet.name || "Buttercup");
+        setPetName(
+          pet.name || "Buttercup"
+        );
+
         const health = pet.health ?? 100;
-        const hearts = Math.max(0, Math.min(5, Math.ceil(health / 20)));
+
+        const hearts = Math.max(
+          0,
+          Math.min(
+            5,
+            Math.ceil(health / 20)
+          )
+        );
+
         setHeartCount(hearts);
       }
 
-      const stats = await getUserStats(user.id);
+      const stats = await getUserStats(
+        user.id
+      );
+
       if (stats) {
-        setStreakDays(stats.streak_days || 0);
-        setCoins(stats.points || 0);
+        setStreakDays(
+          stats.streak_days || 0
+        );
+
+        setCoins(
+          stats.points || 0
+        );
       }
 
       const goalData = await getGoals(id);
-      const formattedGoals = await Promise.all(
-        (goalData || []).map(async (goal: any) => {
-          const proofStatus = await getLatestGoalProofStatus(goal.id);
 
-          const targetUser =
-            goal.assigned_to ?? goal.target_user_id ?? goal.user_id;
-          const isForMe = String(targetUser) === String(user.id);
+      console.log(
+  "ONE-ON-ONE RAW GOALS:",
+  JSON.stringify(goalData, null, 2)
+);
 
-          return {
-            id: goal.id,
-            title: goal.title,
-            isVerifiable: goal.is_verifiable,
-            completed: goal.completed_by !== null,
-            verifiedByFriend: proofStatus === "approved",
-            assignedToUser: isForMe,
-          };
-        }),
+      const formattedGoals =
+        await Promise.all(
+          (goalData || []).map(
+            async (goal: any) => {
+              const proof =
+                await getLatestGoalProof(
+                  goal.id
+                );
+
+              console.log(
+                "PROOF:",
+                proof
+              );
+
+              console.log(
+                "PROOF IMAGE URL:",
+                proof?.image_url
+              );
+
+              const assignedTo =
+  goal.assigned_to ?? null;
+
+const createdBy =
+  goal.created_by ?? null;
+
+const isForMe =
+  String(assignedTo) ===
+  String(user.id);
+
+/*
+ * You can submit proof when the goal
+ * is assigned to you.
+ */
+const canSubmit =
+  String(assignedTo) === String(user.id);
+
+const canReview =
+  String(createdBy) === String(user.id) &&
+  String(assignedTo) !== String(user.id);
+
+              return {
+                id: goal.id,
+                title: goal.title,
+
+                isVerifiable:
+                  goal.is_verifiable,
+
+                completed:
+                  goal.completed_by !== null,
+
+                verifiedByFriend:
+                  proof?.status ===
+                  "approved",
+
+                assignedToUser:
+                  isForMe,
+
+                proofId:
+                  proof?.id ?? null,
+
+                proofStatus:
+                  proof?.status ?? null,
+
+                proofImageUrl:
+                  proof?.image_url ?? null,
+
+                submittedBy:
+                  proof?.submitted_by ??
+                  null,
+
+                assignedTo,
+                createdBy,
+
+                canReview,
+                canSubmit,
+              };
+            },
+          ),
+        );
+
+      setGoals(
+        formattedGoals
+      );
+    } catch (error) {
+      console.error(
+        "Failed to load friendship:",
+        error
       );
 
-      setGoals(formattedGoals);
-    } catch (error) {
-      console.error("Failed to load friendship:", error);
-      Alert.alert("Error", "Could not load this friendship.");
+      Alert.alert(
+        "Error",
+        "Could not load this friendship."
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  const handleOpenReviewModal = (goal: AccountabilityGoal) => {
-    setSelectedGoalForReview(goal);
+  const handleOpenReviewModal = (
+    goal: AccountabilityGoal
+  ) => {
+    /*
+     * Never open the review screen unless
+     * the current user is actually the creator/reviewer.
+     */
+    if (!goal.canReview) {
+      Alert.alert(
+        "Not allowed",
+        "Only the person who created this goal can review the proof."
+      );
+
+      return;
+    }
+
+    /*
+     * Never allow a user to review their own proof.
+     */
+    if (
+      goal.submittedBy &&
+      String(goal.submittedBy) ===
+        String(goal.createdBy)
+    ) {
+      Alert.alert(
+        "Not allowed",
+        "You cannot review your own proof."
+      );
+
+      return;
+    }
+
+    if (!goal.proofId) {
+      Alert.alert(
+        "No proof",
+        "There is no proof to review."
+      );
+
+      return;
+    }
+
+    setSelectedGoalForReview(
+      goal
+    );
+
     setIsReviewModalVisible(true);
   };
 
-  const handleApprove = () => {
-    Alert.alert("Approved!", "Goal proof approved.");
-    setIsReviewModalVisible(false);
+  const handleApprove = async () => {
+    if (
+      !selectedGoalForReview?.proofId
+    ) {
+      return;
+    }
+
+    if (
+      !selectedGoalForReview.canReview
+    ) {
+      Alert.alert(
+        "Not allowed",
+        "Only the goal creator can approve this proof."
+      );
+
+      return;
+    }
+
+    if (
+      selectedGoalForReview.submittedBy &&
+      selectedGoalForReview.createdBy &&
+      String(
+        selectedGoalForReview.submittedBy
+      ) ===
+        String(
+          selectedGoalForReview.createdBy
+        )
+    ) {
+      Alert.alert(
+        "Not allowed",
+        "You cannot approve your own proof."
+      );
+
+      return;
+    }
+
+    try {
+      await approveGoalProof(
+        selectedGoalForReview.proofId
+      );
+
+      Alert.alert(
+        "Approved!",
+        "The goal has been completed and the person who completed it received their reward."
+      );
+
+      setIsReviewModalVisible(
+        false
+      );
+
+      setSelectedGoalForReview(
+        null
+      );
+
+      await loadFriendship();
+    } catch (error: any) {
+      console.error(
+        "Failed to approve proof:",
+        error
+      );
+
+      Alert.alert(
+        "Approval Failed",
+        error?.message ||
+          "Could not approve this proof."
+      );
+    }
   };
 
-  const handleDeny = () => {
-    Alert.alert("Denied", "Goal proof requested again.");
-    setIsReviewModalVisible(false);
+  const handleDeny = async () => {
+    if (
+      !selectedGoalForReview?.proofId
+    ) {
+      return;
+    }
+
+    if (
+      !selectedGoalForReview.canReview
+    ) {
+      Alert.alert(
+        "Not allowed",
+        "Only the goal creator can decline this proof."
+      );
+
+      return;
+    }
+
+    if (
+      selectedGoalForReview.submittedBy &&
+      selectedGoalForReview.createdBy &&
+      String(
+        selectedGoalForReview.submittedBy
+      ) ===
+        String(
+          selectedGoalForReview.createdBy
+        )
+    ) {
+      Alert.alert(
+        "Not allowed",
+        "You cannot decline your own proof."
+      );
+
+      return;
+    }
+
+    try {
+      await declineGoalProof(
+        selectedGoalForReview.proofId
+      );
+
+      Alert.alert(
+        "Proof Denied",
+        "The proof was declined. Your friend can submit another photo."
+      );
+
+      setIsReviewModalVisible(
+        false
+      );
+
+      setSelectedGoalForReview(
+        null
+      );
+
+      await loadFriendship();
+    } catch (error: any) {
+      console.error(
+        "Failed to decline proof:",
+        error
+      );
+
+      Alert.alert(
+        "Decline Failed",
+        error?.message ||
+          "Could not decline this proof."
+      );
+    }
   };
 
   const renderHearts = () => {
     const hearts = [];
+
     for (let i = 1; i <= 5; i++) {
-      const isFilled = i <= heartCount;
+      const isFilled =
+        i <= heartCount;
+
       hearts.push(
-        <View key={i} style={styles.heartContainer}>
+        <View
+          key={i}
+          style={
+            styles.heartContainer
+          }
+        >
           <Ionicons
             name="heart"
             size={20}
             color="#824A20"
-            style={styles.heartBorder}
+            style={
+              styles.heartBorder
+            }
           />
+
           <Ionicons
             name="heart"
             size={16}
-            color={isFilled ? "#E57373" : "#FCE4EC"}
-            style={styles.heartInner}
+            color={
+              isFilled
+                ? "#E57373"
+                : "#FCE4EC"
+            }
+            style={
+              styles.heartInner
+            }
           />
         </View>,
       );
     }
+
     return hearts;
   };
 
-  if (loading || !fontsLoaded) {
+  if (
+    loading ||
+    !fontsLoaded
+  ) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#824A20" />
-        <Text style={styles.loadingText}>Loading friendship...</Text>
+      <View
+        style={
+          styles.loadingContainer
+        }
+      >
+        <ActivityIndicator
+          size="large"
+          color="#824A20"
+        />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Loading friendship...
+        </Text>
       </View>
     );
   }
 
-  const friendGoalsToReview = goals.filter((g) => !g.assignedToUser);
-  const myGoals = goals.filter((g) => g.assignedToUser);
+  const friendGoalsToReview =
+  goals.filter(
+    (g) =>
+      !g.assignedToUser &&
+      g.canReview
+  );
+
+const myGoals = goals.filter(
+  (g) => g.assignedToUser
+);
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen
+        options={{
+          headerShown: false,
+        }}
+      />
 
       {/* HERO AREA */}
-      <View style={styles.fixedHeroContainer}>
+      <View
+        style={
+          styles.fixedHeroContainer
+        }
+      >
         {/* Header */}
-        <View style={styles.topHeader}>
+        <View
+          style={
+            styles.topHeader
+          }
+        >
           <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backBtn}
+            onPress={() =>
+              router.back()
+            }
+            style={
+              styles.backBtn
+            }
           >
-            <Ionicons name="chevron-back" size={28} color="#824A20" />
+            <Ionicons
+              name="chevron-back"
+              size={28}
+              color="#824A20"
+            />
           </TouchableOpacity>
 
-          <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>{friendName}</Text>
-            <Text style={styles.headerSubtitle}>& {petName}</Text>
+          <View
+            style={
+              styles.titleContainer
+            }
+          >
+            <Text
+              style={
+                styles.headerTitle
+              }
+            >
+              {friendName}
+            </Text>
+
+            <Text
+              style={
+                styles.headerSubtitle
+              }
+            >
+              & {petName}
+            </Text>
           </View>
 
-          <View style={styles.headerRightActions}>
+          <View
+            style={
+              styles.headerRightActions
+            }
+          >
             <TouchableOpacity
-              style={styles.shopBtn}
-              onPress={() => router.push(`/friendship/${id}/shop`)}
+              style={
+                styles.shopBtn
+              }
+              onPress={() =>
+                router.push(
+                  `/friendship/${id}/shop`
+                )
+              }
               activeOpacity={0.8}
             >
-              <Ionicons name="bag-handle-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.shopBtnText}>Shop</Text>
+              <Ionicons
+                name="bag-handle-outline"
+                size={16}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.shopBtnText
+                }
+              >
+                Shop
+              </Text>
             </TouchableOpacity>
 
-            <View style={styles.coinBadge}>
-              <Text style={styles.coinText}>${coins}</Text>
+            <View
+              style={
+                styles.coinBadge
+              }
+            >
+              <Text
+                style={
+                  styles.coinText
+                }
+              >
+                ${coins}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Goat Character */}
-        <View style={styles.goatContainer}>
+        <View
+          style={
+            styles.goatContainer
+          }
+        >
           <Image
             source={require("../../../assets/images/friend/goat-main.png")}
-            style={styles.goatImage}
+            style={
+              styles.goatImage
+            }
             resizeMode="contain"
           />
         </View>
 
         {/* Hearts and Streak Row */}
-        <View style={styles.statusRow}>
-          <View style={styles.heartsRow}>{renderHearts()}</View>
+        <View
+          style={
+            styles.statusRow
+          }
+        >
+          <View
+            style={
+              styles.heartsRow
+            }
+          >
+            {renderHearts()}
+          </View>
 
-          <View style={styles.streakBadge}>
+          <View
+            style={
+              styles.streakBadge
+            }
+          >
             <Ionicons
               name="checkmark-circle-outline"
               size={18}
               color="#824A20"
             />
-            <Text style={styles.streakText}>{streakDays}-Day Streak</Text>
+
+            <Text
+              style={
+                styles.streakText
+              }
+            >
+              {streakDays}-Day Streak
+            </Text>
           </View>
         </View>
       </View>
 
       {/* SVG GREEN HILL ARCH */}
-      <View style={styles.hillArchWrapper}>
+      <View
+        style={
+          styles.hillArchWrapper
+        }
+      >
         <Svg
           height="40"
           width={SCREEN_WIDTH}
           viewBox={`0 0 ${SCREEN_WIDTH} 40`}
         >
           <Path
-            d={`M 0,40 Q ${SCREEN_WIDTH / 2},-10 ${SCREEN_WIDTH},40 Z`}
+            d={`M 0,40 Q ${
+              SCREEN_WIDTH / 2
+            },-10 ${
+              SCREEN_WIDTH
+            },40 Z`}
             fill="#A1C99B"
           />
         </Svg>
@@ -253,172 +697,441 @@ export default function FriendshipHomeScreen() {
 
       {/* SCROLLABLE CARD SHEET */}
       <ScrollView
-        style={styles.scrollSheet}
-        showsVerticalScrollIndicator={false}
+        style={
+          styles.scrollSheet
+        }
+        showsVerticalScrollIndicator={
+          false
+        }
       >
-        <View style={styles.scrollContent}>
+        <View
+          style={
+            styles.scrollContent
+          }
+        >
           {/* GOALS FOR FRIEND */}
-          <Text style={styles.sectionTitle}>{friendName}'s Goals</Text>
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            {friendName}'s Goals
+          </Text>
 
-          {friendGoalsToReview.length === 0 ? (
-            <View style={[styles.goalCard, styles.friendGoalCard]}>
-              <View style={styles.goalInfo}>
-                <Text style={styles.goalTitle}>No pending goals</Text>
-                <Text style={styles.goalSubtext}>
+          {friendGoalsToReview.length ===
+          0 ? (
+            <View
+              style={[
+                styles.goalCard,
+                styles.friendGoalCard,
+              ]}
+            >
+              <View
+                style={
+                  styles.goalInfo
+                }
+              >
+                <Text
+                  style={
+                    styles.goalTitle
+                  }
+                >
+                  No pending goals
+                </Text>
+
+                <Text
+                  style={
+                    styles.goalSubtext
+                  }
+                >
                   Verification: Self-Checked
                 </Text>
               </View>
             </View>
           ) : (
-            friendGoalsToReview.map((item) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.goalCard,
-                  styles.friendGoalCard,
-                  item.completed && styles.completedGoalCard,
-                ]}
-              >
-                <View style={styles.goalInfo}>
-                  <Text style={styles.goalTitle}>{item.title}</Text>
-                  <Text style={styles.goalSubtext}>
-                    Type:{" "}
-                    {item.isVerifiable
-                      ? "Photo Verification"
-                      : "Self Check-Off"}
-                  </Text>
-                </View>
-
-                {item.completed ? (
-                  <View style={styles.actionBtnGray}>
-                    <Text style={styles.actionBtnText}>Completed</Text>
-                  </View>
-                ) : item.isVerifiable ? (
-                  <TouchableOpacity
-                    style={styles.actionBtnBlue}
-                    onPress={() => handleOpenReviewModal(item)}
+            friendGoalsToReview.map(
+              (item) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.goalCard,
+                    styles.friendGoalCard,
+                    item.completed &&
+                      styles.completedGoalCard,
+                  ]}
+                >
+                  <View
+                    style={
+                      styles.goalInfo
+                    }
                   >
-                    <Text style={styles.actionBtnText}>Check Photo</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ))
+                    <Text
+                      style={
+                        styles.goalTitle
+                      }
+                    >
+                      {item.title}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.goalSubtext
+                      }
+                    >
+                      Type:{" "}
+                      {item.isVerifiable
+                        ? "Photo Verification"
+                        : "Self Check-Off"}
+                    </Text>
+                  </View>
+
+                  {item.completed ? (
+                    <View
+                      style={
+                        styles.actionBtnGray
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.actionBtnText
+                        }
+                      >
+                        Completed
+                      </Text>
+                    </View>
+                  ) : item.isVerifiable &&
+                    item.proofStatus ===
+                      "pending" &&
+                    item.proofId &&
+                    item.canReview &&
+                    item.submittedBy !==
+                      item.createdBy ? (
+                    <TouchableOpacity
+                      style={
+                        styles.actionBtnBlue
+                      }
+                      onPress={() =>
+                        handleOpenReviewModal(
+                          item
+                        )
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.actionBtnText
+                        }
+                      >
+                        Check Photo
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ),
+            )
           )}
 
           {/* YOUR GOALS */}
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              {
+                marginTop: 24,
+              },
+            ]}
+          >
             Your Goals
           </Text>
 
           {myGoals.length === 0 ? (
-            <View style={[styles.goalCard, styles.myGoalCard]}>
-              <View style={styles.goalInfo}>
-                <Text style={styles.goalTitle}>No goals created yet</Text>
-                <Text style={styles.goalSubtext}>
-                  Verification: Photo approval from {friendName}
+            <View
+              style={[
+                styles.goalCard,
+                styles.myGoalCard,
+              ]}
+            >
+              <View
+                style={
+                  styles.goalInfo
+                }
+              >
+                <Text
+                  style={
+                    styles.goalTitle
+                  }
+                >
+                  No goals created yet
+                </Text>
+
+                <Text
+                  style={
+                    styles.goalSubtext
+                  }
+                >
+                  Verification: Photo approval from{" "}
+                  {friendName}
                 </Text>
               </View>
             </View>
           ) : (
-            myGoals.map((item) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.goalCard,
-                  styles.myGoalCard,
-                  item.completed && styles.completedGoalCard,
-                ]}
-              >
-                <View style={styles.goalInfo}>
-                  <Text style={styles.goalTitle}>{item.title}</Text>
-                  <Text style={styles.goalSubtext}>
-                    Type:{" "}
-                    {item.isVerifiable
-                      ? "Photo Verification"
-                      : "Self Check-Off"}
-                  </Text>
-                </View>
-
-                {item.completed ? (
-                  <View style={styles.actionBtnGray}>
-                    <Text style={styles.actionBtnText}>Done!</Text>
-                  </View>
-                ) : item.isVerifiable ? (
-                  <TouchableOpacity
-                    style={styles.actionBtnBlue}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/friendship/[id]/camera",
-                        params: {
-                          id: id as string,
-                          goalId: item.id,
-                          goalTitle: item.title,
-                        },
-                      })
+            myGoals.map(
+              (item) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.goalCard,
+                    styles.myGoalCard,
+                    item.completed &&
+                      styles.completedGoalCard,
+                  ]}
+                >
+                  <View
+                    style={
+                      styles.goalInfo
                     }
                   >
-                    <Ionicons
-                      name="camera-outline"
-                      size={18}
-                      color="#FFFFFF"
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text style={styles.actionBtnText}>Take Proof</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ))
+                    <Text
+                      style={
+                        styles.goalTitle
+                      }
+                    >
+                      {item.title}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.goalSubtext
+                      }
+                    >
+                      Type:{" "}
+                      {item.isVerifiable
+                        ? "Photo Verification"
+                        : "Self Check-Off"}
+                    </Text>
+                  </View>
+
+                  {item.completed ? (
+                    <View
+                      style={
+                        styles.actionBtnGray
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.actionBtnText
+                        }
+                      >
+                        Done!
+                      </Text>
+                    </View>
+                  ) : item.isVerifiable &&
+                    item.canSubmit ? (
+                    <TouchableOpacity
+                      style={
+                        styles.actionBtnBlue
+                      }
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/friendship/[id]/camera",
+                          params: {
+                            id:
+                              id as string,
+                            goalId:
+                              item.id,
+                            goalTitle:
+                              item.title,
+                          },
+                        })
+                      }
+                    >
+                      <Ionicons
+                        name="camera-outline"
+                        size={18}
+                        color="#FFFFFF"
+                        style={{
+                          marginRight: 4,
+                        }}
+                      />
+
+                      <Text
+                        style={
+                          styles.actionBtnText
+                        }
+                      >
+                        Take Proof
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ),
+            )
           )}
 
           {/* ADD GOAL BUTTON */}
           <TouchableOpacity
-            style={styles.addGoalCardBtn}
-            onPress={() => router.push(`/friendship/${id}/create-goal`)}
+            style={
+              styles.addGoalCardBtn
+            }
+            onPress={() =>
+              router.push(
+                `/friendship/${id}/create-goal`
+              )
+            }
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={32} color="#C7967D" />
-            <Text style={styles.addGoalCardText}>Add Goal</Text>
+            <Ionicons
+              name="add"
+              size={32}
+              color="#C7967D"
+            />
+
+            <Text
+              style={
+                styles.addGoalCardText
+              }
+            >
+              Add Goal
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
       {/* CHECK GOAL PROOF MODAL */}
       <Modal
-        visible={isReviewModalVisible}
+        visible={
+          isReviewModalVisible
+        }
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setIsReviewModalVisible(false)}
+        onRequestClose={() =>
+          setIsReviewModalVisible(
+            false
+          )
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Check Goal</Text>
-              <TouchableOpacity onPress={() => setIsReviewModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#C7967D" />
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+          <View
+            style={
+              styles.modalContent
+            }
+          >
+            <View
+              style={
+                styles.modalHeader
+              }
+            >
+              <Text
+                style={
+                  styles.modalTitle
+                }
+              >
+                Check Goal
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setIsReviewModalVisible(
+                    false
+                  )
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#C7967D"
+                />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalGoalBox}>
-              <Text style={styles.modalGoalLabel}>Goal:</Text>
-              <Text style={styles.modalGoalText}>
-                {selectedGoalForReview?.title || "Walk outside for 10 min"}
+            <View
+              style={
+                styles.modalGoalBox
+              }
+            >
+              <Text
+                style={
+                  styles.modalGoalLabel
+                }
+              >
+                Goal:
+              </Text>
+
+              <Text
+                style={
+                  styles.modalGoalText
+                }
+              >
+                {selectedGoalForReview?.title ||
+                  "Walk outside for 10 min"}
               </Text>
             </View>
 
-            <View style={styles.modalImageFrame}>
-              <Ionicons name="camera-outline" size={64} color="#824A20" />
+            <View
+              style={
+                styles.modalImageFrame
+              }
+            >
+              {selectedGoalForReview?.proofImageUrl ? (
+                <Image
+                  source={{
+                    uri:
+                      selectedGoalForReview.proofImageUrl,
+                  }}
+                  style={
+                    styles.proofImage
+                  }
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons
+                  name="camera-outline"
+                  size={64}
+                  color="#824A20"
+                />
+              )}
             </View>
 
-            <View style={styles.modalActionsRow}>
+            <View
+              style={
+                styles.modalActionsRow
+              }
+            >
               <TouchableOpacity
-                style={styles.approveBtn}
-                onPress={handleApprove}
+                style={
+                  styles.approveBtn
+                }
+                onPress={
+                  handleApprove
+                }
               >
-                <Text style={styles.modalBtnText}>Approve</Text>
+                <Text
+                  style={
+                    styles.modalBtnText
+                  }
+                >
+                  Approve
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.denyBtn} onPress={handleDeny}>
-                <Text style={styles.modalBtnText}>Deny</Text>
+              <TouchableOpacity
+                style={
+                  styles.denyBtn
+                }
+                onPress={
+                  handleDeny
+                }
+              >
+                <Text
+                  style={
+                    styles.modalBtnText
+                  }
+                >
+                  Deny
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -448,7 +1161,6 @@ const styles = StyleSheet.create({
     color: "#824A20",
   },
 
-  /* FIXED TOP HERO AREA */
   fixedHeroContainer: {
     backgroundColor: "#D2E7F5",
     paddingTop: 54,
@@ -577,7 +1289,6 @@ const styles = StyleSheet.create({
     color: "#824A20",
   },
 
-  /* SCROLLABLE SHEET WRAPPER & HILL */
   hillArchWrapper: {
     width: "100%",
     height: 35,
@@ -604,7 +1315,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  /* GOAL CARDS */
   goalCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -693,7 +1403,6 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
 
-  /* MODAL STYLES */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -757,6 +1466,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
+  },
+
+  proofImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
   },
 
   modalActionsRow: {

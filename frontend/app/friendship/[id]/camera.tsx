@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
@@ -17,6 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { supabase } from '../../../lib/supabase';
 import { getLastTab } from '../../../lib/lastTab';
+import { submitGoalProof } from '../../../lib/proofs';
 
 export default function FriendCameraScreen() {
   const router = useRouter();
@@ -25,31 +27,10 @@ export default function FriendCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+
   const [fontsLoaded] = useFonts({
     Itim: require('../../../assets/fonts/Itim.ttf'),
   });
-
-  const handleBack = () => {
-    const returnTo = params.returnTo as string | undefined;
-    if (returnTo) {
-      router.push(returnTo as any);
-      return;
-    }
-
-    // If there is navigation history, pop back to the previous screen
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    const last = getLastTab();
-    if (last && last !== '/(tabs)/camera') {
-      router.push(last as any);
-      return;
-    }
-
-    router.push('/(tabs)');
-  };
 
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
     (params.goalId as string) || null
@@ -71,6 +52,41 @@ export default function FriendCameraScreen() {
 
   const cameraRef = useRef<CameraView>(null);
 
+  const handleBack = () => {
+    const returnTo = params.returnTo as string | undefined;
+
+    if (returnTo) {
+      router.push(returnTo as any);
+      return;
+    }
+
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    const last = getLastTab();
+
+    if (last && last !== '/(tabs)/camera') {
+      router.push(last as any);
+      return;
+    }
+
+    router.push('/(tabs)');
+  };
+
+  /*
+   * TEST VERSION
+   *
+   * If this camera screen was opened with a goalId,
+   * load that EXACT goal.
+   *
+   * We then verify:
+   *
+   * 1. The goal exists.
+   * 2. The goal is assigned to the current user.
+   * 3. The goal belongs to the friendship in the route.
+   */
   const loadGoals = async () => {
     try {
       setLoadingGoals(true);
@@ -88,44 +104,141 @@ export default function FriendCameraScreen() {
         throw new Error('You must be logged in.');
       }
 
+      const goalId = params.goalId as string | undefined;
+      const friendshipId = params.id as string | undefined;
+
+      console.log('====================================');
+      console.log('CAMERA TEST LOAD');
+      console.log('CURRENT USER:', user.id);
+      console.log('ROUTE FRIENDSHIP ID:', friendshipId);
+      console.log('ROUTE GOAL ID:', goalId);
+      console.log('====================================');
+
+      /*
+       * TEST:
+       *
+       * Query ONLY by the exact goal ID first.
+       */
+      if (!goalId) {
+        throw new Error('No goal ID was provided to the camera.');
+      }
+
       const { data, error } = await supabase
         .from('goals')
         .select(`
           id,
           friendship_id,
           title,
+          assigned_to,
+          created_by,
+          completed_at,
           friendships (
             user_a_id,
             user_b_id
           )
-        `);
+        `)
+        .eq('id', goalId)
+        .eq('assigned_to', user.id)
+        .is('completed_at', null);
+
+      console.log(
+        'CAMERA GOAL RESULT:',
+        JSON.stringify(data, null, 2)
+      );
+
+      console.log(
+        'CAMERA QUERY ERROR:',
+        error
+      );
 
       if (error) {
         throw error;
       }
 
-      const formattedGoals = (data || []).map((goal: any) => {
-        const friendship = goal.friendships;
+      const goal = data?.[0];
 
-        const friendId =
-          friendship.user_a_id === user.id
-            ? friendship.user_b_id
-            : friendship.user_a_id;
+      /*
+       * Goal was not found.
+       */
+      if (!goal) {
+        throw new Error(
+          'This goal does not exist, is completed, or is not assigned to you.'
+        );
+      }
 
-        return {
+      /*
+       * Make sure the goal belongs to the friendship
+       * from the route.
+       */
+      console.log(
+        'GOAL FRIENDSHIP ID:',
+        goal.friendship_id
+      );
+
+      console.log(
+        'ROUTE FRIENDSHIP ID:',
+        friendshipId
+      );
+
+      if (goal.friendship_id !== friendshipId) {
+        throw new Error(
+          'This goal does not belong to this friendship.'
+        );
+      }
+
+      /*
+       * Make sure the friendship relationship exists.
+       */
+      const friendship = goal.friendships;
+
+      if (!friendship) {
+        throw new Error(
+          'Could not find the friendship for this goal.'
+        );
+      }
+
+      /*
+       * Determine the other person in the friendship.
+       */
+      const friendId =
+        friendship.user_a_id === user.id
+          ? friendship.user_b_id
+          : friendship.user_a_id;
+
+      console.log(
+        'CAMERA FRIEND ID:',
+        friendId
+      );
+
+      /*
+       * Put the single goal into the goals array.
+       *
+       * We still use the goals array because the existing
+       * UI expects it.
+       */
+      setGoals([
+        {
           id: goal.id,
           friendshipId: goal.friendship_id,
           title: goal.title,
           friendName: friendId || 'Friend',
-        };
-      });
+        },
+      ]);
 
-      setGoals(formattedGoals);
+      /*
+       * Make sure the selected goal is the goal we just loaded.
+       */
+      setSelectedGoalId(goal.id);
+
+      console.log('CAMERA GOAL SUCCESS!');
     } catch (error: any) {
-      console.error('Error loading goals:', error);
+      console.error(
+        'Error loading goals:',
+        error
+      );
 
       Alert.alert(
-        'Could not load goals',
+        'Could not load goal',
         error?.message || 'Something went wrong.'
       );
     } finally {
@@ -147,8 +260,10 @@ export default function FriendCameraScreen() {
 
   if (!fontsLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-        <Text style={{ color: '#FEF9F0', fontFamily: 'Itim' }}>Loading...</Text>
+      <View style={styles.fontLoadingContainer}>
+        <Text style={styles.fontLoadingText}>
+          Loading...
+        </Text>
       </View>
     );
   }
@@ -164,7 +279,9 @@ export default function FriendCameraScreen() {
           style={styles.permButton}
           onPress={requestPermission}
         >
-          <Text style={styles.permBtnText}>Grant Permission</Text>
+          <Text style={styles.permBtnText}>
+            Grant Permission
+          </Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -173,12 +290,24 @@ export default function FriendCameraScreen() {
   const takePicture = async () => {
     if (!cameraRef.current) return;
 
-    const photo = await cameraRef.current.takePictureAsync({
-      quality: 0.7,
-    });
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+      });
 
-    if (photo?.uri) {
-      setCapturedPhoto(photo.uri);
+      if (photo?.uri) {
+        setCapturedPhoto(photo.uri);
+      }
+    } catch (error) {
+      console.error(
+        'Failed to take picture:',
+        error
+      );
+
+      Alert.alert(
+        'Camera Error',
+        'Could not take the picture. Please try again.'
+      );
     }
   };
 
@@ -188,65 +317,45 @@ export default function FriendCameraScreen() {
         'Select a goal',
         'Please select a goal for this photo.'
       );
+
       setIsPickerOpen(true);
       return;
     }
 
     if (!capturedPhoto) {
-      Alert.alert('No photo', 'Please take a photo first.');
+      Alert.alert(
+        'No photo',
+        'Please take a photo first.'
+      );
+
+      return;
+    }
+
+    /*
+     * Make sure the selected goal is actually one
+     * of the goals loaded for this camera screen.
+     */
+    const selectedGoal = goals.find(
+      (goal) => goal.id === selectedGoalId
+    );
+
+    if (!selectedGoal) {
+      Alert.alert(
+        'Invalid goal',
+        'You can only submit proof for a goal assigned to you.'
+      );
+
+      setCapturedPhoto(null);
       return;
     }
 
     setUploading(true);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        throw new Error('You must be logged in to submit proof.');
-      }
-
-      const response = await fetch(capturedPhoto);
-      const arrayBuffer = await response.arrayBuffer();
-
-      const filePath = `${user.id}/${selectedGoalId}/${Date.now()}.jpg`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('goal-proofs')
-        .upload(filePath, arrayBuffer, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage
-        .from('goal-proofs')
-        .getPublicUrl(filePath);
-
-      const { error: proofError } = await supabase
-        .from('goal_proofs')
-        .insert({
-          goal_id: selectedGoalId,
-          submitted_by: user.id,
-          image_url: publicUrl,
-          status: 'pending',
-        });
-
-      if (proofError) {
-        throw proofError;
-      }
+      await submitGoalProof(
+        selectedGoalId,
+        capturedPhoto
+      );
 
       Alert.alert(
         'Proof Submitted!',
@@ -257,7 +366,10 @@ export default function FriendCameraScreen() {
 
       router.replace('/(tabs)');
     } catch (error: any) {
-      console.error('Proof submission error:', error);
+      console.error(
+        'Proof submission error:',
+        error
+      );
 
       Alert.alert(
         'Submission Failed',
@@ -271,8 +383,12 @@ export default function FriendCameraScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen
+        options={{ headerShown: false }}
+      />
+
       <StatusBar hidden={true} />
+
       {capturedPhoto ? (
         <View style={StyleSheet.absoluteFillObject}>
           <Image
@@ -284,14 +400,25 @@ export default function FriendCameraScreen() {
             <View style={styles.topBanner}>
               <TouchableOpacity
                 style={styles.retakeBtn}
-                onPress={() => setCapturedPhoto(null)}
+                onPress={() =>
+                  setCapturedPhoto(null)
+                }
                 disabled={uploading}
               >
-                <Ionicons name="close" size={24} color="#FEF9F0" />
-                <Text style={styles.retakeText}>Retake</Text>
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#FEF9F0"
+                />
+
+                <Text style={styles.retakeText}>
+                  Retake
+                </Text>
               </TouchableOpacity>
 
-              <Text style={styles.bannerTitle}>Proof Preview</Text>
+              <Text style={styles.bannerTitle}>
+                Proof Preview
+              </Text>
 
               <View style={styles.headerSpacer} />
             </View>
@@ -299,7 +426,9 @@ export default function FriendCameraScreen() {
             <View style={styles.reviewBottomBar}>
               <TouchableOpacity
                 style={styles.goalSelectorCard}
-                onPress={() => setIsPickerOpen(true)}
+                onPress={() =>
+                  setIsPickerOpen(true)
+                }
                 disabled={uploading}
               >
                 <View style={{ flex: 1 }}>
@@ -307,7 +436,9 @@ export default function FriendCameraScreen() {
                     ATTACH TO GOAL:
                   </Text>
 
-                  <Text style={styles.selectedGoalTitle}>
+                  <Text
+                    style={styles.selectedGoalTitle}
+                  >
                     {currentSelectedGoal
                       ? `${currentSelectedGoal.title} (${currentSelectedGoal.friendName})`
                       : 'Tap to select a goal...'}
@@ -324,7 +455,8 @@ export default function FriendCameraScreen() {
               <TouchableOpacity
                 style={[
                   styles.submitBtn,
-                  uploading && styles.disabledBtn,
+                  uploading &&
+                    styles.disabledBtn,
                 ]}
                 onPress={handleSubmitProof}
                 disabled={uploading}
@@ -333,11 +465,17 @@ export default function FriendCameraScreen() {
                   name="paper-plane"
                   size={20}
                   color="#FEF9F0"
-                  style={{ marginRight: 8 }}
+                  style={{
+                    marginRight: 8,
+                  }}
                 />
 
-                <Text style={styles.submitBtnText}>
-                  {uploading ? 'Uploading...' : 'Send Proof'}
+                <Text
+                  style={styles.submitBtnText}
+                >
+                  {uploading
+                    ? 'Uploading...'
+                    : 'Send Proof'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -348,16 +486,28 @@ export default function FriendCameraScreen() {
             animationType="slide"
             transparent
           >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
+            <View
+              style={styles.modalOverlay}
+            >
+              <View
+                style={styles.modalContent}
+              >
+                <View
+                  style={styles.modalHeader}
+                >
+                  <Text
+                    style={styles.modalTitle}
+                  >
                     Select Goal for Proof
                   </Text>
 
                   <TouchableOpacity
-                    onPress={() => setIsPickerOpen(false)}
-                    style={styles.closeModalBtn}
+                    onPress={() =>
+                      setIsPickerOpen(false)
+                    }
+                    style={
+                      styles.closeModalBtn
+                    }
                   >
                     <Ionicons
                       name="close"
@@ -368,40 +518,63 @@ export default function FriendCameraScreen() {
                 </View>
 
                 {loadingGoals ? (
-                  <Text style={styles.loadingText}>
+                  <Text
+                    style={styles.loadingText}
+                  >
                     Loading goals...
                   </Text>
                 ) : goals.length === 0 ? (
-                  <Text style={styles.loadingText}>
+                  <Text
+                    style={styles.loadingText}
+                  >
                     No active goals found.
                   </Text>
                 ) : (
                   <FlatList
                     data={goals}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => (
+                    keyExtractor={(item) =>
+                      item.id
+                    }
+                    renderItem={({
+                      item,
+                    }) => (
                       <TouchableOpacity
                         style={[
                           styles.goalOption,
-                          selectedGoalId === item.id &&
+                          selectedGoalId ===
+                            item.id &&
                             styles.selectedGoalOption,
                         ]}
                         onPress={() => {
-                          setSelectedGoalId(item.id);
-                          setIsPickerOpen(false);
+                          setSelectedGoalId(
+                            item.id
+                          );
+                          setIsPickerOpen(
+                            false
+                          );
                         }}
                       >
                         <View>
-                          <Text style={styles.optionTitle}>
+                          <Text
+                            style={
+                              styles.optionTitle
+                            }
+                          >
                             {item.title}
                           </Text>
 
-                          <Text style={styles.optionBuddy}>
-                            Buddy: {item.friendName}
+                          <Text
+                            style={
+                              styles.optionBuddy
+                            }
+                          >
+                            Buddy:{' '}
+                            {item.friendName}
                           </Text>
                         </View>
 
-                        {selectedGoalId === item.id && (
+                        {selectedGoalId ===
+                          item.id && (
                           <Ionicons
                             name="checkmark-circle"
                             size={22}
@@ -417,10 +590,16 @@ export default function FriendCameraScreen() {
           </Modal>
         </View>
       ) : (
-        <View style={StyleSheet.absoluteFillObject}>
+        <View
+          style={
+            StyleSheet.absoluteFillObject
+          }
+        >
           <CameraView
             ref={cameraRef}
-            style={StyleSheet.absoluteFillObject}
+            style={
+              StyleSheet.absoluteFillObject
+            }
             facing={facing}
           />
 
@@ -441,17 +620,27 @@ export default function FriendCameraScreen() {
                 />
               </TouchableOpacity>
 
-              <Text style={styles.topLabel}>Snap Your Proof!</Text>
+              <Text
+                style={styles.topLabel}
+              >
+                Snap Your Proof!
+              </Text>
 
-              <View style={styles.topSpacer} />
+              <View
+                style={styles.topSpacer}
+              />
             </View>
 
-            <View style={styles.bottomControls}>
+            <View
+              style={styles.bottomControls}
+            >
               <TouchableOpacity
                 style={styles.flipBtn}
                 onPress={() =>
                   setFacing(
-                    facing === 'back' ? 'front' : 'back'
+                    facing === 'back'
+                      ? 'front'
+                      : 'back'
                   )
                 }
                 activeOpacity={0.8}
@@ -468,10 +657,14 @@ export default function FriendCameraScreen() {
                 onPress={takePicture}
                 activeOpacity={0.9}
               >
-                <View style={styles.shutterInner} />
+                <View
+                  style={styles.shutterInner}
+                />
               </TouchableOpacity>
 
-              <View style={styles.controlSpacer} />
+              <View
+                style={styles.controlSpacer}
+              />
             </View>
           </SafeAreaView>
         </View>
@@ -484,6 +677,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+
+  fontLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+
+  fontLoadingText: {
+    color: '#FEF9F0',
+    fontFamily: 'Itim',
   },
 
   centerContainer: {
@@ -594,11 +799,13 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    backgroundColor:
+      'rgba(0,0,0,0.28)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(254,249,240,0.35)',
+    borderColor:
+      'rgba(254,249,240,0.35)',
   },
 
   shutterBtn: {
@@ -609,9 +816,13 @@ const styles = StyleSheet.create({
     borderColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor:
+      'rgba(255,255,255,0.08)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 6,
@@ -650,7 +861,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#D8BDAA',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
@@ -681,7 +895,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '72%',
     shadowColor: '#1F4D66',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
     shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 4,
@@ -719,7 +936,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
-  
+
   modalContent: {
     backgroundColor: '#FEF9F0',
     borderTopLeftRadius: 24,
@@ -730,7 +947,10 @@ const styles = StyleSheet.create({
     borderWidth: 4.5,
     borderBottomWidth: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 0,
