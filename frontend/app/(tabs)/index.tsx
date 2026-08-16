@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 
@@ -29,9 +29,11 @@ export default function StreakBuddiesScreen() {
   const [friendships, setFriendships] = useState<FriendshipCard[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(
+  useCallback(() => {
     loadFriendships();
-  }, []);
+  }, [])
+);
 
   async function loadFriendships() {
     try {
@@ -86,7 +88,7 @@ export default function StreakBuddiesScreen() {
           const { data: stats } = await supabase
             .from('user_stats')
             .select('*')
-            .eq('user_id', friendId)
+            .eq('user_id', user.id)
             .maybeSingle();
 
           // Get the shared pet

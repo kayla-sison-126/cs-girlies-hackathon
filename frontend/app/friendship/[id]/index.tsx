@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+  Stack,
+  useFocusEffect,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import {
@@ -46,9 +51,11 @@ export default function FriendshipHomeScreen() {
   const [goals, setGoals] = useState<AccountabilityGoal[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(
+  useCallback(() => {
     loadFriendship();
-  }, [id]);
+  }, [id])
+);
 
   async function loadFriendship() {
     try {
@@ -99,6 +106,7 @@ export default function FriendshipHomeScreen() {
        */
 
       const pet = await getFriendshipPet(id);
+      
 
       if (pet) {
         setPetName(pet.name || 'Buddy');
