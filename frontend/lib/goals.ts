@@ -5,6 +5,7 @@ export async function createGoal(
   friendshipId: string,
   title: string,
   description: string,
+  assignedTo: string,
   isVerifiable: boolean
 ) {
   const {
@@ -16,11 +17,16 @@ export async function createGoal(
     throw new Error('You must be logged in.');
   }
 
+  if (!assignedTo) {
+    throw new Error('You must select who will complete this goal.');
+  }
+
   const { data, error } = await supabase
     .from('goals')
     .insert({
       friendship_id: friendshipId,
       created_by: user.id,
+      assigned_to: assignedTo,
       title: title.trim(),
       description: description.trim() || null,
       is_verifiable: isVerifiable,
