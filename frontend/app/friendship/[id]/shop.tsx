@@ -52,6 +52,18 @@ export default function FriendshipShop() {
       image: require('../../../assets/images/shop/item-previews/red-bow.png'),
     },
     {
+      id: 'bow-',
+      title: 'Brown Bow',
+      price: 600,
+      image: require('../../../assets/images/shop/item-previews/brown-bow.png'),
+    },
+    {
+      id: 'bow-blue',
+      title: 'Blue Bow',
+      price: 650,
+      image: require('../../../assets/images/shop/item-previews/blue-bow.png'),
+    },
+    {
       id: 'bow-green',
       title: 'Green Bow',
       price: 500,
