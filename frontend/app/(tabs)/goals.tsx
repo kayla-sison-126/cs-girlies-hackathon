@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { setLastTab } from '../../lib/lastTab';
 import {
   StyleSheet,
   Text,
