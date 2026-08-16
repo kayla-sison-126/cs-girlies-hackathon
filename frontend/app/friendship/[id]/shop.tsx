@@ -1,133 +1,300 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, SafeAreaView } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  TouchableOpacity,
+  SafeAreaView,
+  Image,
+  Dimensions,
+  Alert,
+} from 'react-native';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 
-const MOCK_SHOP_ITEMS = [
-  { id: 'i1', name: 'Party Hat', emoji: '🥳', price: 50, category: 'Hat' },
-  { id: 'i2', name: 'Sunglasses', emoji: '🕶️', price: 80, category: 'Accessory' },
-  { id: 'i3', name: 'Crown', emoji: '👑', price: 150, category: 'Hat' },
-  { id: 'i4', name: 'Bowtie', emoji: '🎀', price: 40, category: 'Accessory' },
-];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function PetShopScreen() {
-  const [coins, setCoins] = useState(150);
-  const [previewItem, setPreviewItem] = useState<{ name: string; emoji: string } | null>(null);
-  const [equippedItem, setEquippedItem] = useState<string | null>(null);
+type ShopItem = {
+  id: string;
+  title: string;
+  price: number;
+  image: any;
+};
 
-  const handleBuyOrEquip = (item: typeof MOCK_SHOP_ITEMS[0]) => {
-    if (equippedItem === item.id) {
-      setEquippedItem(null); // Unequip
-      return;
-    }
+export default function FriendshipShop() {
+  const router = useRouter();
 
-    if (coins >= item.price) {
-      setEquippedItem(item.id);
-      alert(`Equipped ${item.name}!`);
-    } else {
-      alert('Not enough coins! Complete daily goals to earn more.');
-    }
-  };
+  const [fontsLoaded] = useFonts({
+    Itim: require('../../../assets/fonts/Itim.ttf'),
+  });
+
+  const items: ShopItem[] = [
+    {
+      id: 'bow-orange',
+      title: 'Orange Bow',
+      price: 350,
+      image: require('../../../assets/images/shop/item-previews/orange-bow.png'),
+    },
+    {
+      id: 'bow-pink',
+      title: 'Pink Bow',
+      price: 400,
+      image: require('../../../assets/images/shop/item-previews/pink-bow.png'),
+    },
+    {
+      id: 'bow-red',
+      title: 'Red Bow',
+      price: 450,
+      image: require('../../../assets/images/shop/item-previews/red-bow.png'),
+    },
+    {
+      id: 'bow-green',
+      title: 'Green Bow',
+      price: 500,
+      image: require('../../../assets/images/shop/item-previews/green-bow.png'),
+    },
+  ];
+
+  const [selected, setSelected] = useState<ShopItem | null>(items[1]);
+
+  if (!fontsLoaded) return null;
+
+  const renderItem = ({ item }: { item: ShopItem }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => setSelected(item)}
+      activeOpacity={0.85}
+    >
+      <Text style={styles.itemTitle}>{item.title}</Text>
+      <Text style={styles.priceText}>${item.price}</Text>
+
+      <Image source={item.image} style={styles.itemImage} resizeMode="contain" />
+
+      <TouchableOpacity
+        style={styles.buyButton}
+        onPress={() => Alert.alert('Purchase', `Bought ${item.title} for $${item.price}`)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.buyButtonText}>Buy</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.headerBar}>
-        <Text style={styles.title}>Pet Shop 🛒</Text>
-        <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>💰 {coins} Coins</Text>
-        </View>
+    <LinearGradient colors={['#D2E7F5', '#E1EEF6']} style={styles.container}>
+      <StatusBar hidden />
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Background Grass Hill */}
+      <View style={styles.grassWrapper} pointerEvents="none">
+        <Image
+          source={require('../../../assets/images/GrassHill.png')}
+          style={styles.grassHillBackground}
+          resizeMode="stretch"
+        />
       </View>
 
-      {/* Try-On Preview Box */}
-      <View style={styles.previewBox}>
-        <Text style={styles.previewLabel}>TRY-ON PREVIEW</Text>
-        <View style={styles.petStage}>
-          {previewItem && <Text style={styles.previewEmojiOverlay}>{previewItem.emoji}</Text>}
-          <Text style={styles.petBaseEmoji}>🐱</Text>
-        </View>
-        <Text style={styles.previewSub}>
-          {previewItem ? `Previewing: ${previewItem.name}` : 'Tap an item below to preview it'}
-        </Text>
-      </View>
-
-      {/* Shop Grid */}
-      <FlatList
-        data={MOCK_SHOP_ITEMS}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
-        renderItem={({ item }) => {
-          const isEquipped = equippedItem === item.id;
-
-          return (
-            <TouchableOpacity
-              style={[styles.shopCard, previewItem?.name === item.name && styles.activePreviewCard]}
-              onPress={() => setPreviewItem(item)}
-            >
-              <Text style={styles.itemEmoji}>{item.emoji}</Text>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemPrice}>💰 {item.price}</Text>
-
-              <TouchableOpacity
-                style={[styles.buyBtn, isEquipped && styles.equippedBtn]}
-                onPress={() => handleBuyOrEquip(item)}
-              >
-                <Text style={styles.buyBtnText}>{isEquipped ? 'Equipped' : 'Buy / Equip'}</Text>
-              </TouchableOpacity>
+      <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
+        <View style={styles.innerContainer}>
+          {/* Header Controls */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={28} color="#824A20" />
             </TouchableOpacity>
-          );
-        }}
-      />
-    </SafeAreaView>
+
+            <View style={styles.coinBadge}>
+              <Text style={styles.coinText}>$410</Text>
+            </View>
+          </View>
+
+          {/* Title & Active Try-On Text */}
+          <View style={styles.titleSection}>
+            <Text style={styles.pageTitle}>Shop</Text>
+            <Text style={styles.subText}>Current Try-On:</Text>
+            <Text style={styles.selectedItemText}>
+              {selected ? selected.title : 'None'}
+            </Text>
+          </View>
+
+          {/* Goat Stage Area */}
+          <View style={styles.stageArea}>
+            <Image
+              source={require('../../../assets/images/shop/item-tryons/tryon-base.png')}
+              style={styles.baseGoat}
+              resizeMode="contain"
+            />
+            {selected && (
+              <Image source={selected.image} style={styles.accessory} resizeMode="contain" />
+            )}
+          </View>
+
+          {/* Items Section Header */}
+          <Text style={styles.itemsHeader}>Items</Text>
+
+          {/* Grid List */}
+          <FlatList
+            data={items}
+            keyExtractor={(i) => i.id}
+            numColumns={2}
+            contentContainerStyle={styles.listContainer}
+            columnWrapperStyle={styles.columnWrapper}
+            renderItem={renderItem}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  headerBar: {
+  container: {
+    flex: 1,
+  },
+  grassWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: '35.7%', // Anchors top edge right under the goat stage without clipping
+    zIndex: 1,
+  },
+  grassHillBackground: {
+    width: '100%',
+    height: '100%',
+  },
+  innerContainer: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+  },
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
   },
-  title: { fontSize: 24, fontWeight: 'bold' },
-  coinBadge: { backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, elevation: 1 },
-  coinText: { fontWeight: '700', color: '#D97706' },
-
-  // Preview Box
-  previewBox: {
-    backgroundColor: '#FFF',
-    margin: 20,
-    padding: 16,
+  backBtn: {
+    padding: 4,
+  },
+  coinBadge: { 
+    backgroundColor: '#FFF8EC', 
+    borderRadius: 20, 
+    borderWidth: 3.5, 
+    borderColor: '#C7967D', 
+    paddingHorizontal: 16,
+    marginRight: 4, 
+    paddingVertical: 4, 
+    shadowColor: '#8a6b59', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.2, 
+    shadowRadius: 6, 
+  },
+  coinText: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    color: '#824A20',
+    fontWeight: '700',
+  },
+  titleSection: {
+    marginTop: 8,
+    marginLeft: 8,
+  },
+  pageTitle: {
+    fontFamily: 'Itim',
+    fontSize: 32,
+    color: '#824A20',
+    fontWeight: '700',
+  },
+  subText: {
+    fontFamily: 'Itim',
+    fontSize: 14,
+    color: '#824A20',
+    marginTop: 2,
+  },
+  selectedItemText: {
+    fontFamily: 'Itim',
+    fontSize: 14,
+    color: '#824A20',
+    fontWeight: '700',
+  },
+  stageArea: {
+    height: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 4,
+  },
+  baseGoat: {
+    width: 160,
+    height: 160,
+  },
+  accessory: {
+    position: 'absolute',
+    width: 45,
+    height: 45,
+    top: 12,
+    right: SCREEN_WIDTH * 0.33,
+  },
+  itemsHeader: {
+    fontFamily: 'Itim',
+    fontSize: 22,
+    color: '#824A20',
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 8,
+    marginLeft: 8,
+  },
+  listContainer: {
+    paddingBottom: 40,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  card: {
+    width: '48%',
+    backgroundColor: '#FDF5E6',
+    borderRadius: 24,
+    borderWidth: 4,
+    borderColor: '#C7967D',
+    padding: 12,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  itemTitle: {
+    fontFamily: 'Itim',
+    fontSize: 16,
+    color: '#824A20',
+    fontWeight: '700',
+    alignSelf: 'flex-start',
+  },
+  priceText: {
+    fontFamily: 'Itim',
+    fontSize: 12,
+    color: '#824A20',
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  itemImage: {
+    width: 55,
+    height: 55,
+    marginVertical: 4,
+  },
+  buyButton: {
+    backgroundColor: '#729AB5',
     borderRadius: 16,
+    paddingVertical: 6,
+    width: '100%',
     alignItems: 'center',
-    elevation: 2,
+    marginTop: 8,
   },
-  previewLabel: { fontSize: 11, fontWeight: '800', color: '#888', letterSpacing: 1 },
-  petStage: { position: 'relative', marginVertical: 10, alignItems: 'center' },
-  previewEmojiOverlay: { fontSize: 32, position: 'absolute', top: -15, zIndex: 10 },
-  petBaseEmoji: { fontSize: 64 },
-  previewSub: { fontSize: 12, color: '#666', fontWeight: '500' },
-
-  // Grid
-  shopCard: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    margin: 6,
-    padding: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    elevation: 1,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  buyButtonText: {
+    fontFamily: 'Itim',
+    fontSize: 14,
+    color: '#FEF9F0',
+    fontWeight: '700',
   },
-  activePreviewCard: { borderColor: '#4A90E2' },
-  itemEmoji: { fontSize: 36, marginBottom: 6 },
-  itemName: { fontSize: 14, fontWeight: '700' },
-  itemPrice: { fontSize: 13, color: '#D97706', fontWeight: '600', marginVertical: 4 },
-  buyBtn: { backgroundColor: '#4A90E2', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginTop: 6 },
-  equippedBtn: { backgroundColor: '#4CAF50' },
-  buyBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
 });
