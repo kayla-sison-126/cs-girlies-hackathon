@@ -48,7 +48,7 @@ export default function FriendCameraScreen() {
       return;
     }
 
-    router.push('/(tabs)/index');
+    router.push('/(tabs)');
   };
 
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(

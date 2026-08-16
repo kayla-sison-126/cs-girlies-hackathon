@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 
+const STARTING_COINS = 300;
 const POINTS_PER_GOAL = 10;
-const PET_HEALTH_PER_GOAL = 10;
+
 
 export async function completeGoalWithRewards(
   goalId: string
@@ -164,53 +165,11 @@ export async function completeGoalWithRewards(
     throw statsError;
   }
 
-  /*
-   * ------------------------------------------------
-   * 9. INCREASE FRIENDSHIP PET HEALTH
-   * ------------------------------------------------
-   */
-
-  const {
-    data: pet,
-    error: petLookupError,
-  } = await supabase
-    .from('pets')
-    .select('health')
-    .eq(
-      'friendship_id',
-      goal.friendship_id
-    )
-    .maybeSingle();
-
-  if (petLookupError) {
-    throw petLookupError;
-  }
-
-  if (pet) {
-    const newHealth = Math.min(
-      100,
-      pet.health + PET_HEALTH_PER_GOAL
-    );
-
-    const { error: petError } =
-      await supabase
-        .from('pets')
-        .update({
-          health: newHealth,
-        })
-        .eq(
-          'friendship_id',
-          goal.friendship_id
-        );
-
-    if (petError) {
-      throw petError;
-    }
-  }
+  
 
   /*
    * ------------------------------------------------
-   * 10. RETURN COMPLETED GOAL
+   * 9. RETURN COMPLETED GOAL
    * ------------------------------------------------
    */
 

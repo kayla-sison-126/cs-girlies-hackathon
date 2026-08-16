@@ -45,7 +45,7 @@ export default function GlobalCameraScreen() {
     }
 
     // 3. Fallback default tab
-    router.push('/(tabs)/index');
+    router.push('/(tabs)');
   };
 
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(

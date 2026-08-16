@@ -171,7 +171,7 @@ export default function StreakBuddiesScreen() {
       ]);
 
       setMyPairingCode(code || '');
-      setRequests(receivedRequests as FriendRequest[]);
+      setRequests(receivedRequests);
       setModalVisible(true);
     } catch (error) {
       console.error(
@@ -573,11 +573,7 @@ export default function StreakBuddiesScreen() {
                           styles.requestName
                         }
                       >
-                        {request.sender
-                          ?.display_name ||
-                          request.sender
-                            ?.username ||
-                          'Someone'}
+                        {request.sender?.username || 'Someone'}
                       </Text>
 
                       <Text
