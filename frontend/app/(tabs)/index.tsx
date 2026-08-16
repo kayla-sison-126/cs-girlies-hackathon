@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { setLastTab } from '../../lib/lastTab';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 
@@ -31,6 +32,10 @@ export default function StreakBuddiesScreen() {
 
   useEffect(() => {
     loadFriendships();
+  }, []);
+
+  useEffect(() => {
+    setLastTab('/(tabs)/index');
   }, []);
 
   async function loadFriendships() {

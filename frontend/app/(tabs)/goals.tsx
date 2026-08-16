@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { setLastTab } from '../../lib/lastTab';
 import { supabase } from '../../lib/supabase';
 
 type Goal = {
@@ -34,6 +35,10 @@ export default function AllGoalsScreen() {
 
   useEffect(() => {
     loadGoals();
+  }, []);
+
+  useEffect(() => {
+    setLastTab('/(tabs)/goals');
   }, []);
 
   async function loadGoals() {
@@ -283,6 +288,7 @@ export default function AllGoalsScreen() {
                         params: {
                           friendshipId: item.friendship_id,
                           goalId: item.id,
+                          returnTo: '/(tabs)/goals',
                         },
                       } as any);
                     }}
